@@ -1,10 +1,66 @@
+// ================================================================
+// INTÉGRATION DANS SeasonCalendarScreen.kt
+// ================================================================
+// ÉTAPE 1 — Modifier le SegmentedButton existant (ligne ~60 du fichier)
+// Remplace le SingleChoiceSegmentedButtonRow actuel par celui-ci :
+// ================================================================
+
+/*
+SingleChoiceSegmentedButtonRow {
+    SegmentedButton(
+        selected = currentView == "PROGRAM",
+        onClick = { currentView = "PROGRAM" },
+        shape = SegmentedButtonDefaults.itemShape(index = 0, count = 3)
+    ) { Text("Programme") }
+    SegmentedButton(
+        selected = currentView == "MONTH",
+        onClick = { currentView = "MONTH" },
+        shape = SegmentedButtonDefaults.itemShape(index = 1, count = 3)
+    ) { Text("Calendrier") }
+    SegmentedButton(
+        selected = currentView == "PLANNING",
+        onClick = { currentView = "PLANNING" },
+        shape = SegmentedButtonDefaults.itemShape(index = 2, count = 3)
+    ) { Text("Planification") }
+}
+*/
+
+// ================================================================
+// ÉTAPE 2 — Dans le bloc if/else des vues (ligne ~80), ajouter :
+// ================================================================
+
+/*
+if (currentView == "MONTH") {
+    MonthView(...)
+    DailyEventsList(...)
+} else if (currentView == "PLANNING") {                    // ← NOUVEAU
+    SeasonPlannerView(                                      // ← NOUVEAU
+        config = config,                                    // ← NOUVEAU
+        selectedTeamId = selectedTeamId                     // ← NOUVEAU
+    )                                                       // ← NOUVEAU
+} else {
+    ProgramView(...)
+}
+*/
+
+// ================================================================
+// ÉTAPE 3 — Coller ce Composable dans le même fichier
+//           (ou dans un nouveau fichier SeasonPlannerView.kt)
+// ================================================================
+
 package com.example.coachapp.ui.screens
 
-import androidx.compose.foundation.*
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -17,11 +73,19 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import androidx.compose.material3.DatePicker
+import androidx.compose.material3.DatePickerDialog
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.rememberDatePickerState
 import com.example.coachapp.data.SeasonConfig
+import com.example.coachapp.data.TrainingSession
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.util.*
 
+// ----------------------------------------------------------------
+// Modèle de données pour un Cycle (à ajouter dans data/models)
+// ----------------------------------------------------------------
 data class SeasonCycle(
     val id: String = UUID.randomUUID().toString(),
     val teamId: String,
@@ -32,6 +96,7 @@ data class SeasonCycle(
     val notes: String = ""
 )
 
+// Thèmes disponibles avec leurs couleurs
 val THEMES_VOLLEY = listOf(
     Triple("fondamentaux",  "Fondamentaux",     Color(0xFF85B7EB)),
     Triple("service_recep", "Service / Récep",  Color(0xFF5DCAA5)),
@@ -47,6 +112,9 @@ fun themeColor(theme: String): Color =
 fun themeLabel(theme: String): String =
     THEMES_VOLLEY.find { it.first == theme }?.second ?: theme
 
+// ----------------------------------------------------------------
+// Composable principal
+// ----------------------------------------------------------------
 @Composable
 fun SeasonPlannerView(
     config: SeasonConfig,
@@ -54,10 +122,12 @@ fun SeasonPlannerView(
     cycles: List<SeasonCycle> = emptyList(),
     onCyclesUpdated: (List<SeasonCycle>) -> Unit = {}
 ) {
+    // État local des cycles — à terme persisté dans Room
     var localCycles by remember(selectedTeamId) { mutableStateOf(cycles) }
     var showAddCycle by remember { mutableStateOf(false) }
     var cycleAEditer by remember { mutableStateOf<SeasonCycle?>(null) }
 
+    // Semaines de la saison (septembre → juin)
     val debutSaison = remember { LocalDate.of(LocalDate.now().year, 9, 1)
         .let { if (LocalDate.now().monthValue < 9) it.minusYears(1) else it } }
     val finSaison = remember { debutSaison.plusMonths(10) }
@@ -72,9 +142,11 @@ fun SeasonPlannerView(
         list
     }
 
+    // Filtrer par équipe
     val cyclesFiltres = if (selectedTeamId == null) localCycles
     else localCycles.filter { it.teamId == selectedTeamId }
 
+    // Séances validées par semaine
     val seancesValidees = remember(config, selectedTeamId) {
         config.plannedTrainings.filter {
             (selectedTeamId == null || it.teamId == selectedTeamId) && it.isValidated
@@ -86,6 +158,7 @@ fun SeasonPlannerView(
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
     ) {
+        // En-tête + bouton ajout cycle
         Row(
             modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
             verticalAlignment = Alignment.CenterVertically
@@ -113,9 +186,12 @@ fun SeasonPlannerView(
             }
         }
 
+        // Légende thèmes
         LegendThemes()
+
         Spacer(Modifier.height(12.dp))
 
+        // Grille Gantt scrollable horizontalement
         Box(modifier = Modifier.fillMaxWidth()) {
             val scrollState = rememberScrollState()
             val semWidth = 36.dp
@@ -124,6 +200,7 @@ fun SeasonPlannerView(
             Column(
                 modifier = Modifier.horizontalScroll(scrollState)
             ) {
+                // Ligne mois
                 Row {
                     Spacer(Modifier.width(labelWidth))
                     MoisHeader(semaines, semWidth)
@@ -131,6 +208,7 @@ fun SeasonPlannerView(
 
                 Spacer(Modifier.height(4.dp))
 
+                // Ligne Cycles
                 GanttRow(
                     label = "Cycles",
                     labelWidth = labelWidth,
@@ -184,6 +262,7 @@ fun SeasonPlannerView(
 
                 Spacer(Modifier.height(4.dp))
 
+                // Ligne Thèmes
                 GanttRow(
                     label = "Thèmes",
                     labelWidth = labelWidth,
@@ -217,6 +296,7 @@ fun SeasonPlannerView(
 
                 Spacer(Modifier.height(4.dp))
 
+                // Ligne Séances validées
                 GanttRow(
                     label = "Séances",
                     labelWidth = labelWidth,
@@ -261,11 +341,14 @@ fun SeasonPlannerView(
         }
 
         Spacer(Modifier.height(20.dp))
+
+        // Stats équilibre thématique
         if (cyclesFiltres.isNotEmpty()) {
             StatsEquilibre(cyclesFiltres, semaines)
         }
     }
 
+    // Dialog ajout/édition cycle
     if (showAddCycle || cycleAEditer != null) {
         CycleDialog(
             cycle = cycleAEditer,
@@ -294,6 +377,9 @@ fun SeasonPlannerView(
     }
 }
 
+// ----------------------------------------------------------------
+// En-tête des mois
+// ----------------------------------------------------------------
 @Composable
 fun MoisHeader(semaines: List<LocalDate>, semWidth: androidx.compose.ui.unit.Dp) {
     var dernierMois = -1
@@ -319,6 +405,9 @@ fun MoisHeader(semaines: List<LocalDate>, semWidth: androidx.compose.ui.unit.Dp)
     }
 }
 
+// ----------------------------------------------------------------
+// Ligne générique du Gantt
+// ----------------------------------------------------------------
 @Composable
 fun GanttRow(
     label: String,
@@ -347,26 +436,50 @@ fun GanttRow(
     }
 }
 
+// ----------------------------------------------------------------
+// Légende des thèmes
+// ----------------------------------------------------------------
 @Composable
 fun LegendThemes() {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        THEMES_VOLLEY.forEach { (_, label, color) ->
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(
-                    modifier = Modifier
-                        .size(10.dp)
-                        .background(color.copy(alpha = 0.6f), RoundedCornerShape(3.dp))
-                )
-                Spacer(Modifier.width(3.dp))
-                Text(label, fontSize = 9.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    val chunked = THEMES_VOLLEY.chunked(3)
+    Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        chunked.forEach { ligne ->
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                ligne.forEach { (_, label, color) ->
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(10.dp)
+                                .background(color.copy(alpha = 0.6f), RoundedCornerShape(3.dp))
+                        )
+                        Spacer(Modifier.width(3.dp))
+                        Text(
+                            label,
+                            fontSize = 9.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                }
+                // Compléter avec des espaces vides si la ligne est incomplète
+                repeat(3 - ligne.size) {
+                    Spacer(Modifier.weight(1f))
+                }
             }
         }
     }
 }
 
+// ----------------------------------------------------------------
+// Stats équilibre thématique
+// ----------------------------------------------------------------
 @Composable
 fun StatsEquilibre(cycles: List<SeasonCycle>, semaines: List<LocalDate>) {
     val scoreParTheme = mutableMapOf<String, Int>()
@@ -423,7 +536,11 @@ fun StatsEquilibre(cycles: List<SeasonCycle>, semaines: List<LocalDate>) {
     }
 }
 
+// ----------------------------------------------------------------
+// Dialog création / édition d'un cycle
+// ----------------------------------------------------------------
 @Composable
+@OptIn(ExperimentalMaterial3Api::class)
 fun CycleDialog(
     cycle: SeasonCycle?,
     teams: List<com.example.coachapp.data.Team>,
@@ -456,6 +573,7 @@ fun CycleDialog(
                     modifier = Modifier.padding(bottom = 16.dp)
                 )
 
+                // Nom du cycle
                 OutlinedTextField(
                     value = label,
                     onValueChange = { label = it },
@@ -466,6 +584,7 @@ fun CycleDialog(
 
                 Spacer(Modifier.height(12.dp))
 
+                // Équipe (si pas de filtre actif)
                 if (selectedTeamId == null && teams.size > 1) {
                     Text("Équipe :", style = MaterialTheme.typography.labelSmall)
                     teams.forEach { team ->
@@ -480,6 +599,7 @@ fun CycleDialog(
                     Spacer(Modifier.height(8.dp))
                 }
 
+                // Thème
                 Text("Thème :", style = MaterialTheme.typography.labelSmall)
                 Spacer(Modifier.height(4.dp))
                 THEMES_VOLLEY.forEach { (key, label2, color) ->
@@ -505,24 +625,75 @@ fun CycleDialog(
 
                 Spacer(Modifier.height(12.dp))
 
+                var showDateDebutPicker by remember { mutableStateOf(false) }
+                var showDateFinPicker by remember { mutableStateOf(false) }
+                // Dates — champs simples (date picker à brancher si besoin)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedTextField(
-                        value = dateDebut.format(fmt),
-                        onValueChange = { runCatching { dateDebut = LocalDate.parse(it, fmt) } },
-                        label = { Text("Début") },
-                        modifier = Modifier.weight(1f),
-                        singleLine = true
+                    OutlinedButton(
+                        onClick = { showDateDebutPicker = true },
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text(dateDebut.format(fmt), fontSize = 13.sp)
+                    }
+                    OutlinedButton(
+                        onClick = { showDateFinPicker = true },
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text(dateFin.format(fmt), fontSize = 13.sp)
+                    }
+                }
+
+                if (showDateDebutPicker) {
+                    val state = rememberDatePickerState(
+                        initialSelectedDateMillis = dateDebut
+                            .atStartOfDay(java.time.ZoneId.systemDefault())
+                            .toInstant().toEpochMilli()
                     )
-                    OutlinedTextField(
-                        value = dateFin.format(fmt),
-                        onValueChange = { runCatching { dateFin = LocalDate.parse(it, fmt) } },
-                        label = { Text("Fin") },
-                        modifier = Modifier.weight(1f),
-                        singleLine = true
+                    DatePickerDialog(
+                        onDismissRequest = { showDateDebutPicker = false },
+                        confirmButton = {
+                            TextButton(onClick = {
+                                state.selectedDateMillis?.let {
+                                    dateDebut = java.time.Instant.ofEpochMilli(it)
+                                        .atZone(java.time.ZoneId.systemDefault())
+                                        .toLocalDate()
+                                }
+                                showDateDebutPicker = false
+                            }) { Text("OK") }
+                        },
+                        dismissButton = {
+                            TextButton(onClick = { showDateDebutPicker = false }) { Text("Annuler") }
+                        }
+                    ) { DatePicker(state = state) }
+                }
+
+                if (showDateFinPicker) {
+                    val state = rememberDatePickerState(
+                        initialSelectedDateMillis = dateFin
+                            .atStartOfDay(java.time.ZoneId.systemDefault())
+                            .toInstant().toEpochMilli()
                     )
+                    DatePickerDialog(
+                        onDismissRequest = { showDateFinPicker = false },
+                        confirmButton = {
+                            TextButton(onClick = {
+                                state.selectedDateMillis?.let {
+                                    dateFin = java.time.Instant.ofEpochMilli(it)
+                                        .atZone(java.time.ZoneId.systemDefault())
+                                        .toLocalDate()
+                                }
+                                showDateFinPicker = false
+                            }) { Text("OK") }
+                        },
+                        dismissButton = {
+                            TextButton(onClick = { showDateFinPicker = false }) { Text("Annuler") }
+                        }
+                    ) { DatePicker(state = state) }
                 }
 
                 Spacer(Modifier.height(8.dp))
+
+                // Notes
                 OutlinedTextField(
                     value = notes,
                     onValueChange = { notes = it },
@@ -533,13 +704,14 @@ fun CycleDialog(
 
                 Spacer(Modifier.height(16.dp))
 
+                // Actions
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    if (estEdition && cycle != null) {
+                    if (estEdition) {
                         TextButton(
-                            onClick = { onDelete(cycle.id) },
+                            onClick = { onDelete(cycle!!.id) },
                             colors = ButtonDefaults.textButtonColors(
                                 contentColor = MaterialTheme.colorScheme.error
                             )

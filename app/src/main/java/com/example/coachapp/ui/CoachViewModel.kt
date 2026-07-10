@@ -9,17 +9,31 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.coachapp.data.*
+import com.example.coachapp.data.room.AppDatabase
+import com.example.coachapp.data.room.Cycle
+import com.example.coachapp.ui.screens.SeasonCycle
+import com.example.coachapp.data.CalendrierParser
 import io.github.jan.supabase.gotrue.auth
 import io.github.jan.supabase.gotrue.providers.builtin.Email
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.LocalTime
 
 class CoachViewModel(application: Application) : AndroidViewModel(application) {
     private val persistenceManager = PersistenceManager(application)
+
+    // --- ROOM ---
+    private val db = AppDatabase.getInstance(application)
+    private val cycleRepository = CycleRepository(db.cycleDao())
+
+    // Cycles exposés à l'UI — liste de SeasonCycle (modèle Compose)
+    var cycles by mutableStateOf<List<SeasonCycle>>(emptyList())
+        private set
 
     var flashResults by mutableStateOf(persistenceManager.loadResults(AssessmentType.FLASH))
         private set
@@ -32,7 +46,7 @@ class CoachViewModel(application: Application) : AndroidViewModel(application) {
 
     var isLoggedIn by mutableStateOf(false)
         private set
-        
+
     var authError by mutableStateOf<String?>(null)
         private set
 
@@ -63,6 +77,102 @@ class CoachViewModel(application: Application) : AndroidViewModel(application) {
     var lockerRoomError by mutableStateOf<String?>(null)
         private set
 
+    // ----------------------------------------------------------------
+    // CYCLES — lecture / écriture Room
+    // ----------------------------------------------------------------
+
+    // Charge les cycles d'une catégorie depuis Room
+    // categorieId = index de l'équipe dans la liste (solution temporaire
+    // en attendant que Categorie soit fully migrée dans Room)
+    fun chargerCycles(teamId: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val teamIndex = seasonConfig.teams.indexOfFirst { it.id == teamId }.coerceAtLeast(0)
+            val roomCycles = cycleRepository.getCyclesPourCategorie(teamIndex)
+            val seasonCycles = roomCycles.map { it.toSeasonCycle() }
+            withContext(Dispatchers.Main) {
+                cycles = seasonCycles
+            }
+        }
+    }
+
+    fun chargerTousLesCycles() {
+        viewModelScope.launch(Dispatchers.IO) {
+            val allCycles = seasonConfig.teams.flatMap { team ->
+                val teamIndex = seasonConfig.teams.indexOfFirst { it.id == team.id }.coerceAtLeast(0)
+                cycleRepository.getCyclesPourCategorie(teamIndex).map { it.toSeasonCycle() }
+            }
+            withContext(Dispatchers.Main) {
+                cycles = allCycles
+            }
+        }
+    }
+
+    fun ajouterCycle(seasonCycle: SeasonCycle) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val teamIndex = seasonConfig.teams.indexOfFirst { it.id == seasonCycle.teamId }.coerceAtLeast(0)
+            val roomCycle = seasonCycle.toRoomCycle(teamIndex)
+            cycleRepository.ajouterCycle(roomCycle)
+            chargerTousLesCycles()
+        }
+    }
+
+    fun modifierCycle(seasonCycle: SeasonCycle) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val teamIndex = seasonConfig.teams.indexOfFirst { it.id == seasonCycle.teamId }.coerceAtLeast(0)
+            val roomCycle = seasonCycle.toRoomCycle(teamIndex)
+            cycleRepository.modifierCycle(roomCycle)
+            chargerTousLesCycles()
+        }
+    }
+
+    fun supprimerCycle(cycleId: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val teamIndex = 0 // On cherche par id
+            val roomCycles = cycleRepository.getCyclesPourCategorie(teamIndex)
+            // Cherche dans tous les cycles
+            val allRoomCycles = seasonConfig.teams.flatMapIndexed { index, _ ->
+                cycleRepository.getCyclesPourCategorie(index)
+            }
+            val toDelete = allRoomCycles.firstOrNull { it.id.toString() == cycleId }
+            toDelete?.let { cycleRepository.supprimerCycle(it) }
+            chargerTousLesCycles()
+        }
+    }
+
+    // ----------------------------------------------------------------
+    // Conversions SeasonCycle ↔ Room Cycle
+    // ----------------------------------------------------------------
+
+    private fun Cycle.toSeasonCycle(): SeasonCycle {
+        val team = seasonConfig.teams.getOrNull(categorieId)
+        return SeasonCycle(
+            id = this.id.toString(),
+            teamId = team?.id ?: "",
+            label = this.label ?: "",
+            theme = this.theme ?: "fondamentaux",
+            dateDebut = LocalDate.parse(this.dateDebut),
+            dateFin = LocalDate.parse(this.dateFin),
+            notes = this.notes ?: ""
+        )
+    }
+
+    private fun SeasonCycle.toRoomCycle(categorieId: Int): Cycle {
+        val cycle = Cycle()
+        cycle.categorieId = categorieId
+        cycle.label = this.label
+        cycle.theme = this.theme
+        cycle.dateDebut = this.dateDebut.toString()
+        cycle.dateFin = this.dateFin.toString()
+        cycle.notes = this.notes
+        // Si l'id est un UUID, on le passe en notes pour traçabilité
+        // Room auto-génère l'int id
+        return cycle
+    }
+
+    // ----------------------------------------------------------------
+    // Reste du ViewModel — inchangé
+    // ----------------------------------------------------------------
+
     fun fetchLockerRoomPosts() {
         viewModelScope.launch {
             isLockerRoomLoading = true
@@ -70,7 +180,6 @@ class CoachViewModel(application: Application) : AndroidViewModel(application) {
             try {
                 val response = SupabaseManager.db.from("locker_room_posts")
                     .select()
-                
                 val posts = response.decodeList<AnonymousPost>()
                 publicPosts = mockPosts + posts.sortedByDescending { it.timestamp }
             } catch (e: Exception) {
@@ -99,34 +208,21 @@ class CoachViewModel(application: Application) : AndroidViewModel(application) {
             Log.d("DEBUG_ROLE", "fetchUserRole: No current user found")
             return
         }
-        Log.d("DEBUG_ROLE", "fetchUserRole: Starting for user ${user.id}")
-        
         viewModelScope.launch {
             try {
                 val response = SupabaseManager.db.from("profiles")
-                    .select {
-                        filter { eq("id", user.id) }
-                    }
-                
+                    .select { filter { eq("id", user.id) } }
                 val body = response.data
-                Log.d("DEBUG_ROLE", "Response body = $body")
-
                 val json = kotlinx.serialization.json.Json { ignoreUnknownKeys = true }
                 val profileList = json.decodeFromString<List<kotlinx.serialization.json.JsonObject>>(body)
-                
                 if (profileList.isNotEmpty()) {
                     val roleStr = profileList[0]["role"]?.toString()?.replace("\"", "") ?: "user"
-                    Log.d("DEBUG_ROLE", "Role detected = $roleStr")
-                    
                     userRole = when(roleStr.lowercase()) {
                         "admin" -> UserRole.ADMIN
                         "megadmin" -> UserRole.MEGADMIN
                         else -> UserRole.USER
                     }
-                } else {
-                    Log.d("DEBUG_ROLE", "Profile list is empty")
                 }
-                
                 if (userRole == UserRole.MEGADMIN) fetchAdminAlerts()
             } catch (e: Exception) {
                 Log.e("DEBUG_ROLE", "Error fetching role", e)
@@ -139,7 +235,6 @@ class CoachViewModel(application: Application) : AndroidViewModel(application) {
             isLockerRoomLoading = true
             lockerRoomError = null
             try {
-                // On crée un objet JSON explicite pour éviter l'erreur "Any"
                 val requestBody = kotlinx.serialization.json.buildJsonObject {
                     put("title", kotlinx.serialization.json.JsonPrimitive(title))
                     put("content", kotlinx.serialization.json.JsonPrimitive(content))
@@ -149,12 +244,11 @@ class CoachViewModel(application: Application) : AndroidViewModel(application) {
                     put("is_official", kotlinx.serialization.json.JsonPrimitive(isOfficial))
                     put("author_id", kotlinx.serialization.json.JsonPrimitive(SupabaseManager.auth.currentUserOrNull()?.id ?: ""))
                 }
-
                 SupabaseManager.functions.invoke(
                     function = "anonymize-locker-posts",
                     body = requestBody
                 )
-                fetchLockerRoomPosts() 
+                fetchLockerRoomPosts()
             } catch (e: Exception) {
                 Log.e("POST_ERROR", "Erreur lors de l'envoi", e)
                 lockerRoomError = "Erreur d'envoi : ${e.localizedMessage}"
@@ -165,14 +259,12 @@ class CoachViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     init {
-        // Listen to Auth changes
-        Log.d("DEBUG_ROLE", "ViewModel Init: starting sessionStatus collection")
         SupabaseManager.auth.sessionStatus.onEach { status ->
-            Log.d("DEBUG_ROLE", "Auth status changed: $status")
             isLoggedIn = status is io.github.jan.supabase.gotrue.SessionStatus.Authenticated
             if (isLoggedIn) {
                 fetchLockerRoomPosts()
                 fetchUserRole()
+                chargerTousLesCycles()
             }
         }.launchIn(viewModelScope)
     }
@@ -186,7 +278,6 @@ class CoachViewModel(application: Application) : AndroidViewModel(application) {
                     this.email = email
                     this.password = pass
                 }
-                // Refresh role immediately after login
                 fetchUserRole()
             } catch (e: Exception) {
                 authError = "Erreur de connexion : ${e.localizedMessage}"
@@ -195,7 +286,7 @@ class CoachViewModel(application: Application) : AndroidViewModel(application) {
             }
         }
     }
-    
+
     fun signUp(email: String, pass: String) {
         viewModelScope.launch {
             isAuthLoading = true
@@ -216,16 +307,14 @@ class CoachViewModel(application: Application) : AndroidViewModel(application) {
 
     fun logout() {
         viewModelScope.launch {
-            try {
-                SupabaseManager.auth.signOut()
-            } catch (e: Exception) {}
+            try { SupabaseManager.auth.signOut() } catch (e: Exception) {}
             persistenceManager.clearAllData()
             isLoggedIn = false
-            // Refresh local states
             seasonConfig = SeasonConfig()
             flashResults = null
             globalResults = null
             history = emptyList()
+            cycles = emptyList()
         }
     }
 
@@ -246,6 +335,36 @@ class CoachViewModel(application: Application) : AndroidViewModel(application) {
     fun completeOnboarding(config: SeasonConfig) {
         seasonConfig = config.copy(isOnboardingCompleted = true)
         persistenceManager.saveSeasonConfig(seasonConfig)
+        chargerCalendrierPrevisionnel()
+    }
+
+    fun chargerCalendrierPrevisionnel() {
+        viewModelScope.launch(Dispatchers.IO) {
+            val nouveauxEvenements = mutableListOf<CompetitionEvent>()
+            seasonConfig.teams.forEach { team ->
+                val categorie = CalendrierParser.normaliserCategorie(team.name)
+                val events = CalendrierParser.chargerEvenements(
+                    context = getApplication(),
+                    categories = listOf(categorie),
+                    teamId = team.id
+                )
+                nouveauxEvenements.addAll(events)
+            }
+            withContext(Dispatchers.Main) {
+                // On ne duplique pas les événements déjà présents
+                val existants = seasonConfig.competitions.map { it.date.toString() + it.teamId }.toSet()
+                val aAjouter = nouveauxEvenements.filter {
+                    (it.date.toString() + it.teamId) !in existants
+                }
+                if (aAjouter.isNotEmpty()) {
+                    updateSeasonConfig(
+                        seasonConfig.copy(
+                            competitions = seasonConfig.competitions + aAjouter
+                        )
+                    )
+                }
+            }
+        }
     }
 
     fun updatePlayer(player: Player) {
@@ -262,17 +381,12 @@ class CoachViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun deletePost(postId: String) {
-        Log.d("DEBUG_DELETE", "Attempting to delete post: $postId")
         viewModelScope.launch {
             try {
                 SupabaseManager.db.from("locker_room_posts")
-                    .delete { 
-                        filter { eq("id", postId) } 
-                    }
-                Log.d("DEBUG_DELETE", "Delete request sent successfully")
+                    .delete { filter { eq("id", postId) } }
                 fetchLockerRoomPosts()
             } catch (e: Exception) {
-                Log.e("DEBUG_DELETE", "Error deleting post", e)
                 lockerRoomError = "Erreur de suppression : ${e.localizedMessage}"
             }
         }
@@ -309,7 +423,6 @@ class CoachViewModel(application: Application) : AndroidViewModel(application) {
         val now = LocalDateTime.now()
         val today = LocalDate.now()
         val currentTime = now.toLocalTime()
-        
         seasonConfig.plannedTrainings.find { it.date == today }?.let { session ->
             val endTime = session.startTime.plusMinutes(session.durationMinutes.toLong())
             if (currentTime.isAfter(endTime) && currentTime.isBefore(endTime.plusHours(4))) {
@@ -319,20 +432,9 @@ class CoachViewModel(application: Application) : AndroidViewModel(application) {
         return false
     }
 
-    fun isMonthlyReviewDue(): Boolean {
-        val today = LocalDate.now()
-        return today.dayOfMonth == 1
-    }
+    fun isMonthlyReviewDue(): Boolean = LocalDate.now().dayOfMonth == 1
 
-    fun clearSelectedResource() {
-        selectedResource = null
-    }
-
-    fun clearSelectedTool() {
-        selectedTool = null
-    }
-    
-    fun clearAuthError() {
-        authError = null
-    }
+    fun clearSelectedResource() { selectedResource = null }
+    fun clearSelectedTool() { selectedTool = null }
+    fun clearAuthError() { authError = null }
 }

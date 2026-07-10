@@ -174,6 +174,7 @@ fun CoachAppApp(viewModel: CoachViewModel = viewModel()) {
                             modifier = modifier,
                             persistenceManager = persistenceManager,
                             seasonConfig = viewModel.seasonConfig,
+                            viewModel =viewModel,
                             onUseHelp = { viewModel.useHelp() },
                             helpUsageCount = viewModel.getHelpUsageCountThisMonth(),
                             onNavigateToPreparer = { session ->

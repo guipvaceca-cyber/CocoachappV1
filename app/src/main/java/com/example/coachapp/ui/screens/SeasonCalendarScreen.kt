@@ -49,6 +49,7 @@ fun SeasonCalendarScreen(
     modifier: Modifier = Modifier,
     persistenceManager: PersistenceManager,
     seasonConfig: SeasonConfig,
+    viewModel: com.example.coachapp.ui.CoachViewModel,
     onUseHelp: () -> Unit,
     helpUsageCount: Int,
     onNavigateToPreparer: (TrainingSession) -> Unit,
@@ -66,7 +67,7 @@ fun SeasonCalendarScreen(
 
     Column(modifier = modifier.fillMaxSize().padding(16.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-            Text("Saison 24/25", style = MaterialTheme.typography.headlineMedium, modifier = Modifier.weight(1f))
+            Text("Saison 26/27", style = MaterialTheme.typography.headlineMedium, modifier = Modifier.weight(1f))
             
             IconButton(onClick = { showImportXml = true }) {
                 Icon(Icons.Default.FileUpload, contentDescription = "Import XML", tint = MaterialTheme.colorScheme.secondary)
@@ -142,7 +143,17 @@ fun SeasonCalendarScreen(
         } else if (currentView == "PLANNING") {
             SeasonPlannerView(
                 config = config,
-                selectedTeamId = selectedTeamId
+                selectedTeamId = selectedTeamId,
+                cycles = viewModel.cycles,
+                onCyclesUpdated = { updatedCycles ->
+                    updatedCycles.forEach { cycle ->
+                        if (viewModel.cycles.any { it.id == cycle.id }) {
+                            viewModel.modifierCycle(cycle)
+                        } else {
+                            viewModel.ajouterCycle(cycle)
+                        }
+                    }
+                }
             )
         } else {
             ProgramView(config, filterType, selectedTeamId, persistenceManager, onNavigateToPreparer, onViewRecap) { config = persistenceManager.loadSeasonConfig() }
@@ -475,6 +486,25 @@ fun MonthView(currentDate: LocalDate, config: SeasonConfig, teamId: String?, onD
     val startOffset = (firstDayOfMonth.dayOfWeek.value - 1) % 7
 
     Column {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            IconButton(onClick = { onDateSelected(currentDate.minusMonths(1).withDayOfMonth(1)) }) {
+                Icon(Icons.Default.ChevronLeft, contentDescription = "Mois précédent")
+            }
+            Text(
+                text = currentDate.format(DateTimeFormatter.ofPattern("MMMM yyyy", Locale.FRENCH))
+                    .replaceFirstChar { if (it.isLowerCase()) it.titlecase(Locale.FRENCH) else it.toString() },
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold
+            )
+            IconButton(onClick = { onDateSelected(currentDate.plusMonths(1).withDayOfMonth(1)) }) {
+                Icon(Icons.Default.ChevronRight, contentDescription = "Mois suivant")
+            }
+        }
+
         Row(modifier = Modifier.fillMaxWidth()) {
             listOf("L", "M", "M", "J", "V", "S", "D").forEach {
                 Text(it, modifier = Modifier.weight(1f), textAlign = TextAlign.Center, fontWeight = FontWeight.Bold, fontSize = 12.sp)
