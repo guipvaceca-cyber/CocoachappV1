@@ -399,7 +399,11 @@ fun HeaderSection() {
                         Image(painter = painterResource(id = R.drawable.ic_cocoach_logo), contentDescription = "Logo", modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Fit)
                     }
                     Column(horizontalAlignment = Alignment.End) {
-                        Text(text = "CoCoach", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Black, fontSize = 24.sp, letterSpacing = (-1).sp)
+                        Row(verticalAlignment = Alignment.Bottom) {
+                            Text(text = "CoCoach", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Black, fontSize = 24.sp, letterSpacing = (-1).sp)
+                            Spacer(Modifier.width(4.dp))
+                            Text(text = "v0.1-RC", color = Color.Gray, fontSize = 10.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(bottom = 4.dp))
+                        }
                         Text(text = "FFvolley\nDrôme Ardèche", color = Color.White, textAlign = TextAlign.End, fontWeight = FontWeight.Bold, fontSize = 12.sp, lineHeight = 14.sp)
                     }
                 }

@@ -67,6 +67,15 @@ class CoachViewModel(application: Application) : AndroidViewModel(application) {
     var userRole by mutableStateOf(UserRole.USER)
         private set
 
+    var isCoachCde by mutableStateOf(false)
+        private set
+
+    var cdeCategorie by mutableStateOf<String?>(null)
+        private set
+
+    var cdeRole by mutableStateOf<String?>(null)
+        private set
+
     // --- COMMUNITY / LOCKER ROOM ---
     var publicPosts by mutableStateOf<List<AnonymousPost>>(emptyList())
         private set
@@ -213,8 +222,10 @@ class CoachViewModel(application: Application) : AndroidViewModel(application) {
                 val response = SupabaseManager.db.from("profiles")
                     .select { filter { eq("id", user.id) } }
                 val body = response.data
+                Log.d("DEBUG_ROLE", "profiles response body = $body")
                 val json = kotlinx.serialization.json.Json { ignoreUnknownKeys = true }
                 val profileList = json.decodeFromString<List<kotlinx.serialization.json.JsonObject>>(body)
+                Log.d("DEBUG_ROLE", "profileList size = ${profileList.size}")
                 if (profileList.isNotEmpty()) {
                     val roleStr = profileList[0]["role"]?.toString()?.replace("\"", "") ?: "user"
                     userRole = when(roleStr.lowercase()) {
@@ -222,6 +233,19 @@ class CoachViewModel(application: Application) : AndroidViewModel(application) {
                         "megadmin" -> UserRole.MEGADMIN
                         else -> UserRole.USER
                     }
+
+                    // On récupère les privilèges CDE
+                    val rawIsCoachCde = profileList[0]["is_coach_cde"]?.toString()
+                    isCoachCde = rawIsCoachCde == "true"
+                    cdeCategorie = profileList[0]["cde_categorie"]?.toString()?.replace("\"", "")
+                    
+                    val rawCdeRole = profileList[0]["cde_role"]?.toString()
+                    Log.d("DEBUG_CDE", "cde_role raw = $rawCdeRole")
+                    cdeRole = rawCdeRole?.replace("\"", "")
+                    
+                    Log.d("DEBUG_CDE", "cdeRole final = $cdeRole")
+                    Log.d("DEBUG_CDE", "isCoachCde = $isCoachCde")
+                    Log.d("DEBUG_CDE", "cdeCategorie = $cdeCategorie")
                 }
                 if (userRole == UserRole.MEGADMIN) fetchAdminAlerts()
             } catch (e: Exception) {
@@ -310,6 +334,10 @@ class CoachViewModel(application: Application) : AndroidViewModel(application) {
             try { SupabaseManager.auth.signOut() } catch (e: Exception) {}
             persistenceManager.clearAllData()
             isLoggedIn = false
+            userRole = UserRole.USER
+            isCoachCde = false
+            cdeCategorie = null
+            cdeRole = null
             seasonConfig = SeasonConfig()
             flashResults = null
             globalResults = null
