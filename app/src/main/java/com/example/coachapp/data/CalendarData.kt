@@ -16,10 +16,18 @@ enum class CompetitionType(val label: String, @Serializable(with = ColorSerializ
 }
 
 @Serializable
+data class CdeAssignment(
+    val categorie: String,
+    val sexe: String,          // "M" | "F"
+    val role: String           // "selection_principal" | "selection_adjoint"
+)
+
+@Serializable
 enum class UserRole {
     @SerialName("user") USER,
     @SerialName("admin") ADMIN,
-    @SerialName("megadmin") MEGADMIN
+    @SerialName("megadmin") MEGADMIN,
+    @SerialName("president_club") PRESIDENT_CLUB
 }
 
 @Serializable
@@ -56,21 +64,26 @@ enum class TeamFormat(val label: String, val playerCount: Int) {
 
 @Serializable
 data class TrainingSchedule(
+    val id: String? = null,
     val teamId: String,
+    val clubId: String? = null,
     @Serializable(with = DayOfWeekSerializer::class) val dayOfWeek: DayOfWeek,
     @Serializable(with = LocalTimeSerializer::class) val startTime: LocalTime,
-    val durationMinutes: Int = 90
+    val durationMinutes: Int = 90,
+    val terrain: String? = "Terrain 1"
 )
 
 @Serializable
 data class TrainingSession(
     val id: String,
     val teamId: String,
+    val clubId: String? = null,
     @Serializable(with = LocalDateSerializer::class) val date: LocalDate,
     @Serializable(with = LocalTimeSerializer::class) val startTime: LocalTime,
     val durationMinutes: Int = 90,
+    val terrain: String? = "Terrain 1",
     val focusArea: String? = null,
-    val attendance: List<String> = emptyList(),
+    val attendance: Map<String, String> = emptyMap(), // PlayerID -> Status (present, absent, blesse, pending)
     val assessmentId: String? = null,
     // New fields for session construction
     val warmup: String = "",
@@ -82,21 +95,26 @@ data class TrainingSession(
     val collectiveGame: String = "",
     val collectiveDuration: Int = 25,
     val trainerIntentions: String = "", 
-    val coachIntentions: String = "",    
+    val coachIntentions: String = "",
+    @SerialName("coach_notes") val coachNotes: String? = null,
     val isValidated: Boolean = false,
     val liveFeedback: String = "",
-    val noteForFutureMe: String = "" // New field for temporal feedback
+    val noteForFutureMe: String = "",
+    val saison: String = "2026-2027"
 )
 
 @Serializable
 data class CompetitionEvent(
     val id: String,
     val teamId: String,
+    val clubId: String? = null,
     @Serializable(with = LocalDateSerializer::class) val date: LocalDate,
     @Serializable(with = LocalTimeSerializer::class) val startTime: LocalTime,
     val type: CompetitionType,
     val opponent: String,
-    val location: String
+    val location: String,
+    val attendance: Map<String, String> = emptyMap(), // Convocations CoPlayer
+    val saison: String = "2026-2027"
 )
 
 @Serializable

@@ -41,7 +41,8 @@ fun SessionCompanionScreen(
     persistenceManager: PersistenceManager,
     onUpdateSession: (TrainingSession) -> Unit,
     onFinish: () -> Unit,
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    onPushSession: (TrainingSession) -> Unit = {}
 ) {
     var activePhaseIndex by remember { mutableIntStateOf(0) }
     var timeLeftSeconds by remember { mutableIntStateOf(0) }
@@ -111,7 +112,10 @@ fun SessionCompanionScreen(
                     
                     if (isLastPhase) {
                         Button(
-                            onClick = onFinish,
+                            onClick = { 
+                                onPushSession(session)
+                                onFinish() 
+                            },
                             colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4CAF50)),
                             contentPadding = PaddingValues(horizontal = 12.dp)
                         ) {

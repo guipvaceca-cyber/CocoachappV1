@@ -150,7 +150,11 @@ class PersistenceManager(context: Context) {
             sObj.put("time", s.startTime.toString())
             sObj.put("duration", s.durationMinutes)
             sObj.put("focus", s.focusArea ?: "")
-            sObj.put("attendance", JSONArray(s.attendance))
+            
+            val attObj = JSONObject()
+            s.attendance.forEach { (k, v) -> attObj.put(k, v) }
+            sObj.put("attendance", attObj)
+
             sObj.put("assessmentId", s.assessmentId ?: "")
             sObj.put("warmup", s.warmup)
             sObj.put("warmupDur", s.warmupDuration)
@@ -162,6 +166,7 @@ class PersistenceManager(context: Context) {
             sObj.put("collectiveDur", s.collectiveDuration)
             sObj.put("isValidated", s.isValidated)
             sObj.put("liveFeedback", s.liveFeedback)
+            sObj.put("coachNotes", s.coachNotes ?: "")
             sObj.put("futureNote", s.noteForFutureMe)
             arr.put(sObj)
         }
@@ -174,9 +179,18 @@ class PersistenceManager(context: Context) {
         val arr = JSONArray(str)
         for (i in 0 until arr.length()) {
             val sObj = arr.getJSONObject(i)
-            val attArr = sObj.getJSONArray("attendance")
-            val att = mutableListOf<String>()
-            for (j in 0 until attArr.length()) att.add(attArr.getString(j))
+            
+            val att = mutableMapOf<String, String>()
+            val attJson = sObj.opt("attendance")
+            if (attJson is JSONObject) {
+                attJson.keys().forEach { key ->
+                    att[key] = attJson.getString(key)
+                }
+            } else if (attJson is JSONArray) {
+                for (j in 0 until attJson.length()) {
+                    att[attJson.getString(j)] = "present"
+                }
+            }
             
             list.add(TrainingSession(
                 id = sObj.getString("id"),
@@ -197,6 +211,7 @@ class PersistenceManager(context: Context) {
                 collectiveDuration = sObj.optInt("collectiveDur", 25),
                 isValidated = sObj.optBoolean("isValidated", false),
                 liveFeedback = sObj.optString("liveFeedback", ""),
+                coachNotes = sObj.optString("coachNotes").takeIf { it.isNotEmpty() },
                 noteForFutureMe = sObj.optString("futureNote", "")
             ))
         }
@@ -340,5 +355,21 @@ class PersistenceManager(context: Context) {
     }
     fun saveCredentials(user: String, pass: String) = prefs.edit().putString("auth_user", user).putString("auth_pass", pass).apply()
     fun getCredentials(): Pair<String?, String?> = prefs.getString("auth_user", null) to prefs.getString("auth_pass", null)
+
+    // --- COULEURS ÉQUIPES (Préférences Coach) ---
+    fun saveTeamColors(colors: Map<String, Int>) {
+        val obj = JSONObject()
+        colors.forEach { (id, color) -> obj.put(id, color) }
+        prefs.edit().putString("ui_team_colors", obj.toString()).apply()
+    }
+
+    fun loadTeamColors(): Map<String, Int> {
+        val str = prefs.getString("ui_team_colors", "{}") ?: "{}"
+        val map = mutableMapOf<String, Int>()
+        val obj = JSONObject(str)
+        obj.keys().forEach { id -> map[id] = obj.getInt(id) }
+        return map
+    }
+
     fun clearAllData() = prefs.edit().clear().apply()
 }

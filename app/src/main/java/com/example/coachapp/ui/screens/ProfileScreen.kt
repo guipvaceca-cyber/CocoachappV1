@@ -1,8 +1,5 @@
 package com.example.coachapp.ui.screens
 
-import android.net.Uri
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -16,12 +13,10 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.coachapp.data.AssessmentRecord
-import com.example.coachapp.data.CdeVivierParser
 import com.example.coachapp.data.SeasonConfig
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
@@ -34,15 +29,23 @@ fun ProfileScreen(
     seasonConfig: SeasonConfig = SeasonConfig(),
     userRole: com.example.coachapp.data.UserRole = com.example.coachapp.data.UserRole.USER,
     isCoachCde: Boolean = false,
-    cdeCategorie: String? = null,
-    cdeRole: String? = null,    // "principal" | "adjoint"
+    cdeAssignments: List<com.example.coachapp.data.CdeAssignment> = emptyList(),
+    vivierPrincipal: List<JoueurVivier> = emptyList(),
+    vivierInferieur: List<JoueurVivier> = emptyList(),
+    slotsPersistes: List<com.example.coachapp.ui.screens.JoueurSlot?> = emptyList(),
+    bancPersiste: List<com.example.coachapp.ui.screens.JoueurSlot?> = emptyList(),
+    onOuverture: (categorie: String) -> Unit = {},
+    onSlotChange: (index: Int, type: String, joueur: com.example.coachapp.ui.screens.JoueurSlot?) -> Unit = { _, _, _ -> },
+    onSauvegarder: (principal: List<com.example.coachapp.ui.screens.JoueurSlot?>, banc: List<com.example.coachapp.ui.screens.JoueurSlot?>) -> Unit = { _, _ -> },
     onUpdateConfig: (SeasonConfig) -> Unit = {},
     onLogout: () -> Unit = {},
+    onNavigateToPresident: () -> Unit = {},
     onNavigateToGlobalAssessment: () -> Unit = {}
 ) {
-    android.util.Log.d("PROFILE_DEBUG", "cdeRole reçu = $cdeRole | isCoachCde = $isCoachCde")
+    android.util.Log.d("DEBUG_CDE_PROFILE", "isCoachCde: $isCoachCde, assignments: ${cdeAssignments.size}")
     val dateFormat = remember { SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.getDefault()) }
     var expandedSection by remember { mutableStateOf("IDENTITY") }
+    var categorieEnConvocation by remember { mutableStateOf<String?>(null) }
 
     Column(
         modifier = modifier
@@ -96,21 +99,56 @@ fun ProfileScreen(
         }
 
         // --- SECTION 3 : HUB CDE (visible uniquement si coach CDE) ---
-        if (isCoachCde && cdeCategorie != null) {
+        if (isCoachCde) {
+            cdeAssignments.forEach { assignment ->
+                Spacer(modifier = Modifier.height(12.dp))
+                val isPrincipalRole = assignment.role == "selection_principal"
+                val displaySexe = if (assignment.sexe == "M") "Masculin" else if (assignment.sexe == "F") "Féminin" else ""
+                
+                ProfileExpandableSection(
+                    title = "Hub CDE — ${assignment.categorie} $displaySexe",
+                    description = if (isPrincipalRole) "Coach principal · Sélection "
+                    else "Coach adjoint · Vue lecture",
+                    icon = Icons.Default.Stars,
+                    isExpanded = expandedSection == "CDE_${assignment.categorie}_${assignment.sexe}",
+                    onToggle = { 
+                        val key = "CDE_${assignment.categorie}_${assignment.sexe}"
+                        expandedSection = if (expandedSection == key) "" else key 
+                    }
+                ) {
+                    HubCdeContent(
+                        cdeCategorie = assignment.categorie,
+                        cdeRole = assignment.role,
+                        isPrincipal = isPrincipalRole,
+                        slots = slotsPersistes,
+                        onShowConvocation = { categorieEnConvocation = assignment.categorie }
+                    )
+                }
+            }
+        }
+
+        // --- SECTION 4 : HUB PRÉSIDENT (visible uniquement si rôle Président) ---
+        if (userRole == com.example.coachapp.data.UserRole.PRESIDENT_CLUB) {
             Spacer(modifier = Modifier.height(12.dp))
             ProfileExpandableSection(
-                title = "Hub CDE — $cdeCategorie",
-                description = if (cdeRole == "selection_principal") "Coach principal · Sélection "
-                else "Coach adjoint · Vue lecture",
-                icon = Icons.Default.Stars,
-                isExpanded = expandedSection == "CDE",
-                onToggle = { expandedSection = if (expandedSection == "CDE") "" else "CDE" }
+                title = "Hub Président",
+                description = "Gérez vos collectifs et vos coachs.",
+                icon = Icons.Default.Business,
+                isExpanded = expandedSection == "PRESIDENT",
+                onToggle = { expandedSection = if (expandedSection == "PRESIDENT") "" else "PRESIDENT" }
             ) {
-                HubCdeContent(
-                    cdeCategorie = cdeCategorie,
-                    cdeRole = cdeRole ?: "adjoint",
-                    isPrincipal = cdeRole == "selection_principal"
-                )
+                Column(modifier = Modifier.padding(8.dp)) {
+                    Text("Gestion du club : ${seasonConfig.coachProfile.clubName.ifEmpty { "Mon Club" }}", fontWeight = FontWeight.Bold)
+                    Spacer(Modifier.height(8.dp))
+                    Button(
+                        onClick = onNavigateToPresident,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Icon(Icons.Default.Dashboard, null)
+                        Spacer(Modifier.width(8.dp))
+                        Text("Ouvrir le Tableau de Bord Club")
+                    }
+                }
             }
         }
 
@@ -139,6 +177,21 @@ fun ProfileScreen(
             Text("Déconnexion & Réinitialisation", fontWeight = FontWeight.Bold)
         }
     }
+
+    if (categorieEnConvocation != null) {
+        ConvocationSheet(
+            isVisible = true,
+            onDismiss = { categorieEnConvocation = null },
+            cdeCategorie = categorieEnConvocation!!,
+            vivierPrincipal = vivierPrincipal,
+            vivierInferieur = vivierInferieur,
+            slotsPersistes = slotsPersistes,
+            bancPersiste = bancPersiste,
+            onOuverture = { onOuverture(categorieEnConvocation!!) },
+            onSlotChange = { index, type, joueur -> onSlotChange(index, type, joueur) },
+            onSauvegarder = { principal, banc -> onSauvegarder(principal, banc) }
+        )
+    }
 }
 
 // ----------------------------------------------------------------
@@ -148,48 +201,11 @@ fun ProfileScreen(
 fun HubCdeContent(
     cdeCategorie: String,
     cdeRole: String,
-    isPrincipal: Boolean
+    isPrincipal: Boolean,
+    slots: List<JoueurSlot?>,
+    onShowConvocation: () -> Unit
 ) {
-    val context = LocalContext.current
-    val scope = rememberCoroutineScope()
-
-    var importStatut by remember { mutableStateOf<String?>(null) }
-    var isImporting by remember { mutableStateOf(false) }
-    var nbJoueursImportes by remember { mutableStateOf(0) }
-    var showConvocation by remember { mutableStateOf(false) }
-
-    // Picker de fichier CSV
-    val csvLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.GetContent()
-    ) { uri: Uri? ->
-        uri?.let {
-            scope.launch {
-                isImporting = true
-                importStatut = null
-
-                val result = CdeVivierParser.parserCSV(context, uri)
-                result.fold(
-                    onSuccess = { joueurs ->
-                        val stats = CdeVivierParser.stats(joueurs)
-                        val syncResult = CdeVivierParser.syncVersSupabase(joueurs)
-                        syncResult.fold(
-                            onSuccess = { nb ->
-                                nbJoueursImportes = nb
-                                importStatut = "✓ $nb joueurs importés — ${stats.entries.joinToString { "${it.key}: ${it.value}" }}"
-                            },
-                            onFailure = { e ->
-                                importStatut = "Erreur sync Supabase : ${e.localizedMessage}"
-                            }
-                        )
-                    },
-                    onFailure = { e ->
-                        importStatut = "Erreur lecture CSV : ${e.localizedMessage}"
-                    }
-                )
-                isImporting = false
-            }
-        }
-    }
+    val countConvoques = slots.count { it != null }
 
     Column(modifier = Modifier.padding(8.dp)) {
 
@@ -200,7 +216,7 @@ fun HubCdeContent(
                 shape = RoundedCornerShape(8.dp)
             ) {
                 Text(
-                    text = if (isPrincipal) "Coach Principal" else "Coach Adjoint",
+                    text = if (isPrincipal) "Sélectionneur Principal" else "Coach Adjoint",
                     modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Bold,
@@ -224,58 +240,6 @@ fun HubCdeContent(
 
         HorizontalDivider(modifier = Modifier.padding(bottom = 12.dp))
 
-        // Import CSV — uniquement pour le coach principal
-        if (isPrincipal) {
-            Text(
-                "Vivier de joueurs",
-                style = MaterialTheme.typography.labelMedium,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.padding(bottom = 8.dp)
-            )
-
-            if (nbJoueursImportes > 0) {
-                Text(
-                    "$nbJoueursImportes joueurs dans le vivier",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = Color(0xFF085041),
-                    modifier = Modifier.padding(bottom = 8.dp)
-                )
-            }
-
-            if (isImporting) {
-                LinearProgressIndicator(modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp))
-                Text("Import en cours...", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
-            } else {
-                OutlinedButton(
-                    onClick = { csvLauncher.launch("text/*") },
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(8.dp)
-                ) {
-                    Icon(Icons.Default.FileUpload, null, modifier = Modifier.size(16.dp))
-                    Spacer(Modifier.width(8.dp))
-                    Text("Importer CSV FFVB ($cdeCategorie)", fontSize = 13.sp)
-                }
-            }
-
-            importStatut?.let { statut ->
-                Spacer(Modifier.height(8.dp))
-                val isError = statut.startsWith("Erreur")
-                Surface(
-                    color = if (isError) Color(0xFFFAECE7) else Color(0xFFE1F5EE),
-                    shape = RoundedCornerShape(8.dp)
-                ) {
-                    Text(
-                        statut,
-                        modifier = Modifier.padding(10.dp),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = if (isError) Color(0xFF993C1D) else Color(0xFF085041)
-                    )
-                }
-            }
-
-            HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp))
-        }
-
         // Accès aux convocations
         Text(
             "Convocations",
@@ -284,42 +248,102 @@ fun HubCdeContent(
             modifier = Modifier.padding(bottom = 8.dp)
         )
 
-        // Placeholder — sera remplacé par la liste des convocations depuis Supabase
         Surface(
-            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+            color = if (countConvoques > 0) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)
+                    else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
             shape = RoundedCornerShape(8.dp),
             modifier = Modifier.fillMaxWidth()
         ) {
             Column(modifier = Modifier.padding(12.dp)) {
                 Text(
-                    "Aucune convocation en cours",
+                    text = if (countConvoques > 0) "$countConvoques convocation${if(countConvoques>1) "s" else ""} en cours"
+                           else "Aucune convocation en cours",
                     style = MaterialTheme.typography.bodySmall,
-                    color = Color.Gray
+                    color = if (countConvoques > 0) MaterialTheme.colorScheme.primary else Color.Gray,
+                    fontWeight = if (countConvoques > 0) FontWeight.Bold else FontWeight.Normal
                 )
                 if (isPrincipal) {
                     Spacer(Modifier.height(8.dp))
                     TextButton(
                         onClick = { 
                             android.util.Log.d("DEBUG_CDE", "Click Nouvelle convocation")
-                            showConvocation = true 
+                            onShowConvocation()
                         },
                         contentPadding = PaddingValues(0.dp)
                     ) {
                         Icon(Icons.Default.Add, null, modifier = Modifier.size(16.dp))
                         Spacer(Modifier.width(4.dp))
-                        Text("Nouvelle convocation", fontSize = 13.sp)
+                        Text(if (countConvoques > 0) "Modifier la sélection" else "Nouvelle convocation", fontSize = 13.sp)
                     }
                 }
             }
         }
 
-        ConvocationSheet(
-            isVisible = showConvocation,
-            onDismiss = { showConvocation = false },
-            cdeCategorie = cdeCategorie,
-            vivierPrincipal = emptyList(),
-            vivierInferieur = emptyList()
-        )
+        if (countConvoques > 0) {
+            Spacer(modifier = Modifier.height(16.dp))
+            HorizontalDivider(modifier = Modifier.padding(bottom = 12.dp), thickness = 0.5.dp)
+            
+            Text(
+                "Sélection en cours",
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.padding(bottom = 8.dp)
+            )
+
+            // Petit tableau récap
+            Card(
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                shape = RoundedCornerShape(8.dp)
+            ) {
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    slots.filterNotNull().forEachIndexed { idx, joueur ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 12.dp, vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "${idx + 1}.",
+                                style = MaterialTheme.typography.bodySmall,
+                                modifier = Modifier.width(24.dp),
+                                color = Color.Gray
+                            )
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    "${joueur.prenom} ${joueur.nom}",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Text(
+                                    joueur.club,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = Color.Gray
+                                )
+                            }
+                            if (joueur.estSurclasse) {
+                                Surface(
+                                    color = Color(0xFFFFEBEE),
+                                    shape = RoundedCornerShape(4.dp)
+                                ) {
+                                    Text(
+                                        "S",
+                                        modifier = Modifier.padding(horizontal = 4.dp),
+                                        fontSize = 9.sp,
+                                        color = Color.Red,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                            }
+                        }
+                        if (idx < slots.filterNotNull().size - 1) {
+                            HorizontalDivider(modifier = Modifier.padding(horizontal = 12.dp), thickness = 0.5.dp)
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -330,9 +354,10 @@ fun HubCdeContent(
 @Composable
 fun RoleBadge(role: com.example.coachapp.data.UserRole) {
     val (label, color, icon) = when (role) {
-        com.example.coachapp.data.UserRole.USER     -> Triple("USER",     Color.Gray,                          Icons.Default.Person)
-        com.example.coachapp.data.UserRole.ADMIN    -> Triple("ADMIN",    MaterialTheme.colorScheme.primary,   Icons.Default.Shield)
-        com.example.coachapp.data.UserRole.MEGADMIN -> Triple("MEGADMIN", Color.Red,                           Icons.Default.AutoAwesome)
+        com.example.coachapp.data.UserRole.USER           -> Triple("USER",      Color.Gray,                          Icons.Default.Person)
+        com.example.coachapp.data.UserRole.ADMIN          -> Triple("ADMIN",     MaterialTheme.colorScheme.primary,   Icons.Default.Shield)
+        com.example.coachapp.data.UserRole.MEGADMIN       -> Triple("MEGADMIN",  Color.Red,                           Icons.Default.AutoAwesome)
+        com.example.coachapp.data.UserRole.PRESIDENT_CLUB -> Triple("PRÉSIDENT", Color(0xFFFF9800),                  Icons.Default.Stars)
     }
 
     Column(horizontalAlignment = Alignment.CenterHorizontally) {

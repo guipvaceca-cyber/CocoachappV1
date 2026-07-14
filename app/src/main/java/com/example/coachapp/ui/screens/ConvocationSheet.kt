@@ -11,6 +11,7 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.filled.Save
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -74,6 +75,10 @@ fun ConvocationSheet(
     cdeCategorie: String,
     vivierPrincipal: List<JoueurVivier>,    // M15 (ou catégorie coach)
     vivierInferieur: List<JoueurVivier>,    // M13 surclassés
+    slotsPersistes: List<JoueurSlot?> = emptyList(),
+    bancPersiste: List<JoueurSlot?> = emptyList(),
+    onOuverture: () -> Unit = {},
+    onSlotChange: (index: Int, type: String, joueur: JoueurSlot?) -> Unit = { _, _, _ -> },
     onSauvegarder: (principal: List<JoueurSlot?>, banc: List<JoueurSlot?>) -> Unit = { _, _ -> }
 ) {
     android.util.Log.d("DEBUG_CDE", "ConvocationSheet isVisible = $isVisible")
@@ -84,8 +89,19 @@ fun ConvocationSheet(
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
     // État des tableaux
-    val slotsPrincipal = remember { mutableStateListOf<JoueurSlot?>().apply { repeat(quota) { add(null) } } }
-    val slotsBanc = remember { mutableStateListOf<JoueurSlot?>().apply { repeat(quota) { add(null) } } }
+    val slotsPrincipal = remember(slotsPersistes) {
+        mutableStateListOf<JoueurSlot?>().apply {
+            repeat(quota) { i -> add(slotsPersistes.getOrNull(i)) }
+        }
+    }
+    val slotsBanc = remember(bancPersiste) {
+        mutableStateListOf<JoueurSlot?>().apply {
+            repeat(quota) { i -> add(bancPersiste.getOrNull(i)) }
+        }
+    }
+    LaunchedEffect(isVisible) {
+        if (isVisible) onOuverture()
+    }
 
     // Slot actif pour l'autocomplete
     var slotActifIndex by remember { mutableStateOf<Int?>(null) }
@@ -124,8 +140,14 @@ fun ConvocationSheet(
             estSurclasse = joueur.estSurclasse
         )
         when (slotActifType) {
-            "PRINCIPAL" -> slotActifIndex?.let { slotsPrincipal[it] = slot }
-            "BANC"      -> slotActifIndex?.let { slotsBanc[it] = slot }
+            "PRINCIPAL" -> slotActifIndex?.let {
+                slotsPrincipal[it] = slot
+                onSlotChange(it, "PRINCIPAL", slot)
+            }
+            "BANC" -> slotActifIndex?.let {
+                slotsBanc[it] = slot
+                onSlotChange(it, "BANC", slot)
+            }
         }
         slotActifIndex = null
         slotActifType = null
@@ -133,19 +155,20 @@ fun ConvocationSheet(
     }
 
     fun retirerJoueur(index: Int, type: String) {
-        val slots = if (type == "PRINCIPAL") slotsPrincipal else slotsBanc
-
-        // Si banc non vide et on retire du principal → propose le 1er remplaçant
         if (type == "PRINCIPAL") {
             val premierBanc = slotsBanc.indexOfFirst { it != null }
             if (premierBanc >= 0) {
                 val remplacant = slotsBanc[premierBanc]!!.copy(statut = StatutSlot.PROMU)
                 slotsPrincipal[index] = remplacant
                 slotsBanc[premierBanc] = null
+                onSlotChange(index, "PRINCIPAL", remplacant)
+                onSlotChange(premierBanc, "BANC", null)
                 return
             }
         }
+        val slots = if (type == "PRINCIPAL") slotsPrincipal else slotsBanc
         slots[index] = null
+        onSlotChange(index, type, null)
         slotActifIndex = index
         slotActifType = type
         queryRecherche = ""
@@ -176,16 +199,34 @@ fun ConvocationSheet(
                         )
                     }
                     val nbPrincipal = slotsPrincipal.count { it != null }
-                    if (nbPrincipal == quota) {
-                        Button(
+                    
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        // Bouton Enregistrer (toujours visible)
+                        TextButton(
                             onClick = {
                                 onSauvegarder(slotsPrincipal.toList(), slotsBanc.toList())
                                 scope.launch { sheetState.hide(); onDismiss() }
                             },
+                            modifier = Modifier.padding(end = 8.dp)
+                        ) {
+                            Icon(Icons.Default.Save, null, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(4.dp))
+                            Text("Enregistrer", fontSize = 13.sp)
+                        }
+
+                        // Bouton Envoyer (activé seulement si quota atteint)
+                        Button(
+                            onClick = {
+                                // Logique d'envoi final (passer en statut ENVOYÉ par ex)
+                                onSauvegarder(slotsPrincipal.toList(), slotsBanc.toList())
+                                scope.launch { sheetState.hide(); onDismiss() }
+                            },
+                            enabled = nbPrincipal == quota,
                             colors = ButtonDefaults.buttonColors(
                                 containerColor = Color(0xFF1D9E75)
                             ),
-                            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
+                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+                            shape = RoundedCornerShape(8.dp)
                         ) {
                             Icon(Icons.AutoMirrored.Filled.Send, null, modifier = Modifier.size(16.dp))
                             Spacer(Modifier.width(6.dp))

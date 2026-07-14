@@ -13,8 +13,10 @@ import com.example.coachapp.data.room.AppDatabase
 import com.example.coachapp.data.room.Cycle
 import com.example.coachapp.ui.screens.SeasonCycle
 import com.example.coachapp.data.CalendrierParser
+import io.github.jan.supabase.postgrest.query.Columns
 import io.github.jan.supabase.gotrue.auth
 import io.github.jan.supabase.gotrue.providers.builtin.Email
+import androidx.compose.ui.graphics.Color
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
@@ -23,6 +25,7 @@ import kotlinx.coroutines.withContext
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.LocalTime
+import java.util.UUID
 
 class CoachViewModel(application: Application) : AndroidViewModel(application) {
     private val persistenceManager = PersistenceManager(application)
@@ -53,6 +56,9 @@ class CoachViewModel(application: Application) : AndroidViewModel(application) {
     var isAuthLoading by mutableStateOf(false)
         private set
 
+    var isFetchingProfile by mutableStateOf(false)
+        private set
+
     var selectedResource by mutableStateOf<LaboResource?>(null)
     var coachSpaceTab by mutableIntStateOf(0)
     var laboTab by mutableStateOf(LaboTab.CORPUS)
@@ -64,16 +70,33 @@ class CoachViewModel(application: Application) : AndroidViewModel(application) {
     var adminAlerts by mutableStateOf<List<AdminAlert>>(emptyList())
         private set
 
+    var vivierPrincipal by mutableStateOf<List<com.example.coachapp.ui.screens.JoueurVivier>>(emptyList())
+        private set
+
+    var vivierInferieur by mutableStateOf<List<com.example.coachapp.ui.screens.JoueurVivier>>(emptyList())
+        private set
+
+    var convocationEnCours by mutableStateOf<Long?>(null)
+        private set
+
+    var slotsPersistes by mutableStateOf<List<com.example.coachapp.ui.screens.JoueurSlot?>>(emptyList())
+        private set
+
+    var bancPersiste by mutableStateOf<List<com.example.coachapp.ui.screens.JoueurSlot?>>(emptyList())
+        private set
     var userRole by mutableStateOf(UserRole.USER)
         private set
+
+    var presidentClubId: String? = null
 
     var isCoachCde by mutableStateOf(false)
         private set
 
-    var cdeCategorie by mutableStateOf<String?>(null)
+    // Liste des affectations CDE (ex: M13M selection_principal, M18F selection_principal)
+    var cdeAssignments by mutableStateOf<List<CdeAssignment>>(emptyList())
         private set
 
-    var cdeRole by mutableStateOf<String?>(null)
+    var pendingInvitations by mutableStateOf<List<Team>>(emptyList())
         private set
 
     // --- COMMUNITY / LOCKER ROOM ---
@@ -181,7 +204,265 @@ class CoachViewModel(application: Application) : AndroidViewModel(application) {
     // ----------------------------------------------------------------
     // Reste du ViewModel — inchangé
     // ----------------------------------------------------------------
+    fun chargerVivier() {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val response = SupabaseManager.db
+                    .from("vue_vivier_coach")
+                    .select()
+                val body = response.data
+                val json = kotlinx.serialization.json.Json { ignoreUnknownKeys = true }
+                val joueurs = json.decodeFromString<List<kotlinx.serialization.json.JsonObject>>(body)
 
+                val principal = mutableListOf<com.example.coachapp.ui.screens.JoueurVivier>()
+                val inferieur = mutableListOf<com.example.coachapp.ui.screens.JoueurVivier>()
+
+                joueurs.forEach { j ->
+                    val priorite = j["priorite_affichage"]?.toString()?.replace("\"","")?.toIntOrNull() ?: 1
+                    val joueur = com.example.coachapp.ui.screens.JoueurVivier(
+                        id           = j["id"]?.toString()?.replace("\"","") ?: "",
+                        nom          = j["nom"]?.toString()?.replace("\"","") ?: "",
+                        prenom       = j["prenom"]?.toString()?.replace("\"","") ?: "",
+                        club         = j["club_nom"]?.toString()?.replace("\"","") ?: "",
+                        categorie    = j["categorie"]?.toString()?.replace("\"","") ?: "",
+                        estSurclasse = j["est_surclasse"]?.toString() == "true",
+                        taille       = j["taille"]?.toString()?.replace("\"","")?.toIntOrNull() ?: 0
+                    )
+                    if (priorite == 1) principal.add(joueur)
+                    else inferieur.add(joueur)
+                }
+
+                withContext(Dispatchers.Main) {
+                    vivierPrincipal = principal
+                    vivierInferieur = inferieur
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("VIVIER", "Erreur chargement vivier", e)
+            }
+        }
+    }
+    fun creerOuChargerConvocation(categorie: String, quota: Int) {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val userId = SupabaseManager.auth.currentUserOrNull()?.id ?: return@launch
+                Log.d("CONVOCATION", "Recherche BROUILLON pour coach: $userId, catégorie: $categorie")
+
+                // Cherche une convocation BROUILLON existante
+                val response = SupabaseManager.db
+                    .from("cde_convocation")
+                    .select {
+                        filter {
+                            eq("coach_id", userId)
+                            eq("categorie", categorie)
+                            eq("statut", "BROUILLON")
+                        }
+                    }
+
+                val body = response.data
+                val json = kotlinx.serialization.json.Json { ignoreUnknownKeys = true }
+                val convocations = json.decodeFromString<List<kotlinx.serialization.json.JsonObject>>(body)
+                Log.d("CONVOCATION", "Convocation existantes trouvées: ${convocations.size}")
+
+                val convocationId = if (convocations.isNotEmpty()) {
+                    convocations[0]["id"]?.toString()?.replace("\"","")?.toLongOrNull()
+                } else {
+                    Log.d("CONVOCATION", "Création nouvelle convocation BROUILLON")
+                    // Crée une nouvelle convocation
+                    val nouvelle = mapOf(
+                        "coach_id"         to userId,
+                        "categorie"        to categorie,
+                        "niveau"           to "selection",
+                        "statut"           to "BROUILLON",
+                        "quota_principal"  to quota,
+                        "quota_banc"       to quota
+                    )
+                    val createResponse = SupabaseManager.db
+                        .from("cde_convocation")
+                        .insert(nouvelle) {
+                            select()
+                        }
+                    val createBody = createResponse.data
+                    val created = json.decodeFromString<List<kotlinx.serialization.json.JsonObject>>(createBody)
+                    val newId = created.firstOrNull()?.get("id")?.toString()?.replace("\"","")?.toLongOrNull()
+                    Log.d("CONVOCATION", "Nouvelle convocation créée avec ID: $newId")
+                    newId
+                }
+
+                convocationEnCours = convocationId
+
+                // Charge les slots existants
+                convocationId?.let { chargerSlots(it, quota) }
+
+            } catch (e: Exception) {
+                android.util.Log.e("CONVOCATION", "Erreur création/chargement", e)
+            }
+        }
+    }
+
+    fun chargerSlots(convocationId: Long, quota: Int) {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val response = SupabaseManager.db
+                    .from("cde_slot")
+                    .select {
+                        filter { eq("convocation_id", convocationId) }
+                    }
+
+                val body = response.data
+                val json = kotlinx.serialization.json.Json { ignoreUnknownKeys = true }
+                val slots = json.decodeFromString<List<kotlinx.serialization.json.JsonObject>>(body)
+                Log.d("CONVOCATION", "Slots chargés depuis Supabase: ${slots.size}")
+
+                val principal = MutableList<com.example.coachapp.ui.screens.JoueurSlot?>(quota) { null }
+                val banc = MutableList<com.example.coachapp.ui.screens.JoueurSlot?>(quota) { null }
+
+                slots.forEach { s ->
+                    val ordre = s["ordre"]?.toString()?.replace("\"","")?.toIntOrNull()?.minus(1) ?: return@forEach
+                    val type = s["type_tableau"]?.toString()?.replace("\"","") ?: return@forEach
+                    val slot = com.example.coachapp.ui.screens.JoueurSlot(
+                        id       = s["joueur_id"]?.toString()?.replace("\"","") ?: "",
+                        nom      = s["joueur_nom"]?.toString()?.replace("\"","") ?: "",
+                        prenom   = s["joueur_prenom"]?.toString()?.replace("\"","") ?: "",
+                        club     = s["joueur_club"]?.toString()?.replace("\"","") ?: "",
+                        categorie = s["joueur_categorie"]?.toString()?.replace("\"","") ?: "",
+                        statut   = com.example.coachapp.ui.screens.StatutSlot.valueOf(
+                            s["statut"]?.toString()?.replace("\"","") ?: "CONVOQUE"
+                        )
+                    )
+                    if (type == "PRINCIPAL" && ordre in 0 until quota) principal[ordre] = slot
+                    if (type == "BANC" && ordre in 0 until quota) banc[ordre] = slot
+                }
+
+                withContext(Dispatchers.Main) {
+                    slotsPersistes = principal
+                    bancPersiste = banc
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("CONVOCATION", "Erreur chargement slots", e)
+            }
+        }
+    }
+
+    fun sauvegarderSlot(
+        index: Int,
+        type: String,
+        joueur: com.example.coachapp.ui.screens.JoueurSlot?
+    ) {
+        val convId = convocationEnCours ?: return
+
+        // Mise à jour locale immédiate pour la fluidité UI
+        val currentList = if (type == "PRINCIPAL") slotsPersistes else bancPersiste
+        val updatedList = currentList.toMutableList()
+        if (index in updatedList.indices) {
+            updatedList[index] = joueur
+            if (type == "PRINCIPAL") slotsPersistes = updatedList else bancPersiste = updatedList
+        }
+
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                if (joueur == null) {
+                    // Supprime le slot
+                    SupabaseManager.db.from("cde_slot").delete {
+                        filter {
+                            eq("convocation_id", convId)
+                            eq("type_tableau", type)
+                            eq("ordre", index + 1)
+                        }
+                    }
+                } else {
+                    // Upsert le slot
+                    val row = mapOf(
+                        "convocation_id"   to convId,
+                        "joueur_id"        to joueur.id.toLongOrNull(),
+                        "type_tableau"     to type,
+                        "ordre"            to (index + 1),
+                        "statut"           to joueur.statut.name,
+                        "joueur_nom"       to joueur.nom,
+                        "joueur_prenom"    to joueur.prenom,
+                        "joueur_club"      to joueur.club,
+                        "joueur_categorie" to joueur.categorie
+                    )
+                    SupabaseManager.db.from("cde_slot").upsert(row, onConflict = "convocation_id,type_tableau,ordre")
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("CONVOCATION", "Erreur sauvegarde slot", e)
+            }
+        }
+    }
+
+    fun sauvegarderSelection(
+        principal: List<com.example.coachapp.ui.screens.JoueurSlot?>,
+        banc: List<com.example.coachapp.ui.screens.JoueurSlot?>
+    ) {
+        // Mise à jour locale immédiate
+        slotsPersistes = principal
+        bancPersiste = banc
+
+        val convId = convocationEnCours ?: return
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                // On prépare tous les slots non nulls
+                val rows = mutableListOf<Map<String, Any?>>()
+                
+                principal.forEachIndexed { index, joueur ->
+                    if (joueur != null) {
+                        rows.add(mapOf(
+                            "convocation_id"   to convId,
+                            "joueur_id"        to joueur.id,
+                            "type_tableau"     to "PRINCIPAL",
+                            "ordre"            to (index + 1),
+                            "statut"           to joueur.statut.name,
+                            "joueur_nom"       to joueur.nom,
+                            "joueur_prenom"    to joueur.prenom,
+                            "joueur_club"      to joueur.club,
+                            "joueur_categorie" to joueur.categorie
+                        ))
+                    }
+                }
+                
+                banc.forEachIndexed { index, joueur ->
+                    if (joueur != null) {
+                        rows.add(mapOf(
+                            "convocation_id"   to convId,
+                            "joueur_id"        to joueur.id,
+                            "type_tableau"     to "BANC",
+                            "ordre"            to (index + 1),
+                            "statut"           to joueur.statut.name,
+                            "joueur_nom"       to joueur.nom,
+                            "joueur_prenom"    to joueur.prenom,
+                            "joueur_club"      to joueur.club,
+                            "joueur_categorie" to joueur.categorie
+                        ))
+                    }
+                }
+
+                if (rows.isNotEmpty()) {
+                    SupabaseManager.db.from("cde_slot").upsert(rows, onConflict = "convocation_id,type_tableau,ordre")
+                }
+                
+                Log.d("CONVOCATION", "Sauvegarde globale réussie : ${rows.size} slots")
+            } catch (e: Exception) {
+                Log.e("CONVOCATION", "Erreur sauvegarde globale", e)
+            }
+        }
+    }
+
+    fun finaliserConvocation() {
+        val convId = convocationEnCours ?: return
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                // Marque la convocation comme PRÊTE (ou autre statut final)
+                SupabaseManager.db.from("cde_convocation").update(
+                    mapOf("statut" to "READY")
+                ) {
+                    filter { eq("id", convId) }
+                }
+                Log.d("CONVOCATION", "Convocation $convId marquée comme READY")
+            } catch (e: Exception) {
+                Log.e("CONVOCATION", "Erreur finalisation", e)
+            }
+        }
+    }
     fun fetchLockerRoomPosts() {
         viewModelScope.launch {
             isLockerRoomLoading = true
@@ -219,37 +500,139 @@ class CoachViewModel(application: Application) : AndroidViewModel(application) {
         }
         viewModelScope.launch {
             try {
+                isFetchingProfile = true
+                Log.d("DEBUG_ROLE", "Début fetchUserRole pour ${user.id}")
+                
+                // 1. Lire le profil existant
                 val response = SupabaseManager.db.from("profiles")
                     .select { filter { eq("id", user.id) } }
                 val body = response.data
-                Log.d("DEBUG_ROLE", "profiles response body = $body")
+                Log.d("DEBUG_ROLE", "Profil body = $body")
+                
                 val json = kotlinx.serialization.json.Json { ignoreUnknownKeys = true }
                 val profileList = json.decodeFromString<List<kotlinx.serialization.json.JsonObject>>(body)
-                Log.d("DEBUG_ROLE", "profileList size = ${profileList.size}")
+
                 if (profileList.isNotEmpty()) {
-                    val roleStr = profileList[0]["role"]?.toString()?.replace("\"", "") ?: "user"
-                    userRole = when(roleStr.lowercase()) {
+                    val profile = profileList[0]
+                    fun getStr(key: String) = profile[key]?.toString()?.replace("\"", "")?.takeIf { it != "null" }
+                    
+                    val roleStr = getStr("role") ?: "user"
+                    Log.d("DEBUG_ROLE", "roleStr du profil = $roleStr")
+                    
+                    val detectedRole = when(roleStr.lowercase()) {
                         "admin" -> UserRole.ADMIN
                         "megadmin" -> UserRole.MEGADMIN
+                        "president_club" -> UserRole.PRESIDENT_CLUB
                         else -> UserRole.USER
                     }
-
-                    // On récupère les privilèges CDE
-                    val rawIsCoachCde = profileList[0]["is_coach_cde"]?.toString()
-                    isCoachCde = rawIsCoachCde == "true"
-                    cdeCategorie = profileList[0]["cde_categorie"]?.toString()?.replace("\"", "")
+                    userRole = detectedRole
+                    Log.d("DEBUG_ROLE", "userRole détecté = $userRole")
                     
-                    val rawCdeRole = profileList[0]["cde_role"]?.toString()
-                    Log.d("DEBUG_CDE", "cde_role raw = $rawCdeRole")
-                    cdeRole = rawCdeRole?.replace("\"", "")
+                    // On pré-remplit le profil local avec les infos Supabase
+                    val currentProfile = seasonConfig.coachProfile
+                    val updatedProfile = currentProfile.copy(
+                        firstName = getStr("first_name") ?: currentProfile.firstName,
+                        lastName = getStr("last_name") ?: currentProfile.lastName,
+                        clubName = getStr("club_nom") ?: currentProfile.clubName,
+                        role = detectedRole
+                    )
+                    updateSeasonConfig(seasonConfig.copy(coachProfile = updatedProfile))
                     
-                    Log.d("DEBUG_CDE", "cdeRole final = $cdeRole")
-                    Log.d("DEBUG_CDE", "isCoachCde = $isCoachCde")
-                    Log.d("DEBUG_CDE", "cdeCategorie = $cdeCategorie")
+                    isCoachCde = profile["is_coach_cde"]?.toString() == "true"
+                    if (isCoachCde) {
+                        val cat = getStr("cde_categorie") ?: "M15"
+                        val sexe = getStr("cde_sexe") ?: "M"
+                        val role = getStr("cde_role") ?: "selection_adjoint"
+                        cdeAssignments = listOf(CdeAssignment(cat, sexe, role))
+                    }
+                    
+                    if (detectedRole == UserRole.PRESIDENT_CLUB) {
+                        presidentClubId = getStr("club_id")
+                        Log.d("DEBUG_ROLE", "Club ID récupéré du profil = $presidentClubId")
+                    }
                 }
+
+                // 2. Vérifier les rôles additionnels (table user_roles)
+                try {
+                    val userRolesResponse = SupabaseManager.db.from("user_roles")
+                        .select { filter { eq("user_id", user.id) } }
+                    val userRolesList = json.decodeFromString<List<kotlinx.serialization.json.JsonObject>>(userRolesResponse.data)
+                    
+                    val appRoles = userRolesList.map { it["role"]?.toString()?.replace("\"", "") ?: "" }
+                    Log.d("DEBUG_ROLE", "Rôles additionnels (user_roles) = $appRoles")
+
+                    if ("admin_ct" in appRoles) {
+                        userRole = UserRole.ADMIN
+                    } else if ("president_club" in appRoles) {
+                        userRole = UserRole.PRESIDENT_CLUB
+                        val clubEntry = userRolesList.firstOrNull { it["role"]?.toString()?.replace("\"", "") == "president_club" }
+                        presidentClubId = clubEntry?.get("club_id")?.toString()?.replace("\"", "")
+                    }
+                } catch (e: Exception) {
+                    Log.w("DEBUG_ROLE", "Erreur (non critique) lecture table user_roles: ${e.message}")
+                }
+
+                Log.d("DEBUG_ROLE", "userRole FINAL = $userRole | ClubID = $presidentClubId")
+
                 if (userRole == UserRole.MEGADMIN) fetchAdminAlerts()
+                
+                // 3. Charger les invitations pour l'onboarding
+                fetchClubInvitations()
+
             } catch (e: Exception) {
-                Log.e("DEBUG_ROLE", "Error fetching role", e)
+                Log.e("DEBUG_ROLE", "CRITICAL ERROR in fetchUserRole", e)
+            } finally {
+                isFetchingProfile = false
+            }
+        }
+    }
+
+    fun fetchClubInvitations() {
+        val user = SupabaseManager.auth.currentUserOrNull() ?: return
+        val email = user.email
+        
+        viewModelScope.launch {
+            try {
+                // On cherche les invitations par email
+                val response = SupabaseManager.db.from("invitation")
+                    .select(Columns.raw("*, collectif(*)")) {
+                        filter {
+                            eq("email", email ?: "")
+                            eq("statut", "en_attente")
+                        }
+                    }
+                
+                val body = response.data
+                val json = kotlinx.serialization.json.Json { ignoreUnknownKeys = true }
+                val invites = json.decodeFromString<List<kotlinx.serialization.json.JsonObject>>(body)
+                
+                val detectedTeams = invites.mapNotNull { inv ->
+                    val coll = inv["collectif"]?.let { if (it is kotlinx.serialization.json.JsonObject) it else null }
+                    if (coll != null) {
+                        val cat = coll["categorie"]?.toString()?.replace("\"", "") ?: ""
+                        val sexe = coll["sexe"]?.toString()?.replace("\"", "") ?: ""
+                        val nom = coll["nom"]?.toString()?.replace("\"", "") ?: ""
+                        
+                        Team(
+                            id = coll["id"]?.toString()?.replace("\"", "") ?: UUID.randomUUID().toString(),
+                            name = "$cat $sexe ($nom)",
+                            color = Color(0xFF4CAF50), // Vert par défaut pour les équipes officielles
+                            objective = "Projet Club Officiel",
+                            format = when(coll["format"]?.toString()?.replace("\"", "")) {
+                                "2x2" -> TeamFormat.TWO_TWO
+                                "3x3" -> TeamFormat.THREE_THREE
+                                "4x4" -> TeamFormat.FOUR_FOUR
+                                else -> TeamFormat.SIX_SIX
+                            }
+                        )
+                    } else null
+                }
+                
+                pendingInvitations = detectedTeams
+                Log.d("DEBUG_INVITE", "Invitations trouvées : ${pendingInvitations.size}")
+                
+            } catch (e: Exception) {
+                Log.e("DEBUG_INVITE", "Erreur fetchClubInvitations", e)
             }
         }
     }
@@ -289,6 +672,8 @@ class CoachViewModel(application: Application) : AndroidViewModel(application) {
                 fetchLockerRoomPosts()
                 fetchUserRole()
                 chargerTousLesCycles()
+                chargerCalendrierPrevisionnel()
+                chargerVivier()
             }
         }.launchIn(viewModelScope)
     }
@@ -302,9 +687,9 @@ class CoachViewModel(application: Application) : AndroidViewModel(application) {
                     this.email = email
                     this.password = pass
                 }
-                fetchUserRole()
+                // ← supprime fetchUserRole() ici, le init s'en charge
             } catch (e: Exception) {
-                authError = "Erreur de connexion : ${e.localizedMessage}"
+                authError = "Erreur de connexion : ${e.message} / ${e.cause} / ${e::class.simpleName}"
             } finally {
                 isAuthLoading = false
             }
@@ -336,8 +721,7 @@ class CoachViewModel(application: Application) : AndroidViewModel(application) {
             isLoggedIn = false
             userRole = UserRole.USER
             isCoachCde = false
-            cdeCategorie = null
-            cdeRole = null
+            cdeAssignments = emptyList()
             seasonConfig = SeasonConfig()
             flashResults = null
             globalResults = null

@@ -28,10 +28,12 @@ import java.util.*
 
 @Composable
 fun OnboardingScreen(
+    initialConfig: SeasonConfig,
+    pendingInvitations: List<Team> = emptyList(),
     onCompleted: (SeasonConfig) -> Unit
 ) {
     var step by remember { mutableIntStateOf(1) }
-    var config by remember { mutableStateOf(SeasonConfig()) }
+    var config by remember { mutableStateOf(initialConfig) }
 
     Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         Column(
@@ -62,7 +64,7 @@ fun OnboardingScreen(
                         1 -> IdentityStep(config) { updated -> config = updated; step = 2 }
                         2 -> ProfessionalStep(config) { updated -> config = updated; step = 3 }
                         3 -> PersonaStep(config) { updated -> config = updated; step = 4 }
-                        4 -> TeamsStep(config) { updated -> config = updated; step = 5 }
+                        4 -> TeamsStep(config, pendingInvitations) { updated -> config = updated; step = 5 }
                         5 -> FinalStep(config) { onCompleted(config.copy(isOnboardingCompleted = true)) }
                     }
                 }
@@ -225,7 +227,7 @@ fun PersonaStep(config: SeasonConfig, onNext: (SeasonConfig) -> Unit) {
 }
 
 @Composable
-fun TeamsStep(config: SeasonConfig, onNext: (SeasonConfig) -> Unit) {
+fun TeamsStep(config: SeasonConfig, pendingInvitations: List<Team>, onNext: (SeasonConfig) -> Unit) {
     var teams by remember { mutableStateOf(config.teams) }
     var showAddTeam by remember { mutableStateOf(false) }
 
@@ -237,6 +239,58 @@ fun TeamsStep(config: SeasonConfig, onNext: (SeasonConfig) -> Unit) {
         Spacer(Modifier.height(24.dp))
 
         LazyColumn(modifier = Modifier.weight(1f)) {
+            // --- SECTION INVITATIONS ---
+            if (pendingInvitations.isNotEmpty()) {
+                item {
+                    Text(
+                        "INVITATIONS DE VOTRE CLUB",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.primary,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(bottom = 8.dp)
+                    )
+                }
+                items(pendingInvitations) { team ->
+                    val isAlreadyAdded = teams.any { it.id == team.id }
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 4.dp)
+                            .clickable(enabled = !isAlreadyAdded) { teams = teams + team },
+                        shape = RoundedCornerShape(16.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor = if (isAlreadyAdded) Color(0xFFE1F5EE) 
+                                             else MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f)
+                        ),
+                        border = if (!isAlreadyAdded) androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.primary) else null
+                    ) {
+                        Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Icon(if (isAlreadyAdded) Icons.Default.CheckCircle else Icons.Default.AddCircle, null, tint = if (isAlreadyAdded) Color(0xFF085041) else MaterialTheme.colorScheme.primary)
+                            Spacer(Modifier.width(16.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(team.name, fontWeight = FontWeight.Bold)
+                                Text("Assignation officielle • ${team.format.label}", style = MaterialTheme.typography.labelSmall)
+                            }
+                            if (!isAlreadyAdded) {
+                                Text("AJOUTER", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Black, color = MaterialTheme.colorScheme.primary)
+                            }
+                        }
+                    }
+                }
+                item { Spacer(Modifier.height(24.dp)) }
+            }
+
+            // --- SECTION VOS ÉQUIPES ---
+            item {
+                Text(
+                    "VOS GROUPES",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = Color.Gray,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(bottom = 8.dp)
+                )
+            }
+
             items(teams) { team ->
                 Card(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp), shape = RoundedCornerShape(16.dp), colors = CardDefaults.cardColors(containerColor = team.color.copy(alpha = 0.1f))) {
                     Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {

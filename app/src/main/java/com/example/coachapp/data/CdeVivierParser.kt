@@ -9,26 +9,18 @@ data class JoueurVivier(
     val numLicence: String,
     val nom: String,
     val prenom: String,
-    val dateNaissance: String,   // format ISO "2013-06-04"
-    val categorie: String,       // "M13", "M15"...
+    val dateNaissance: String,
+    val categorie: String,
     val sexe: String,
     val taille: Int,
     val nationalite: String,
     val clubCode: String,
     val clubNom: String,
-    val estSurclasse: Boolean    // Surcl. = "S"
+    val estSurclasse: Boolean
 )
 
 object CdeVivierParser {
 
-    /**
-     * Parse un fichier CSV FFVB depuis un Uri (sélectionné via Intent)
-     * et retourne la liste des joueurs.
-     *
-     * @param context Context Android
-     * @param uri Uri du fichier CSV sélectionné
-     * @param categorieAttendue Si non null, filtre uniquement cette catégorie
-     */
     fun parserCSV(
         context: Context,
         uri: Uri,
@@ -42,15 +34,12 @@ object CdeVivierParser {
 
             val reader = BufferedReader(InputStreamReader(inputStream, "UTF-8"))
 
-            // Première ligne = en-têtes
             val headerLine = reader.readLine() ?: return Result.failure(Exception("Fichier vide"))
 
-            // Détection du séparateur (; dans les CSV FFVB)
             val separateur = if (headerLine.contains(";")) ";" else ","
 
             val headers = headerLine.split(separateur).map { it.trim() }
 
-            // Index des colonnes qu'on utilise
             val idxLicence     = headers.indexOf("lnumlic")
             val idxNom         = headers.indexOf("Nom")
             val idxPrenom      = headers.indexOf("Prenom")
@@ -62,7 +51,6 @@ object CdeVivierParser {
             val idxSurclasse   = headers.indexOf("Surcl.")
             val idxClub        = headers.indexOf("vb_club")
 
-            // Vérification colonnes obligatoires
             if (idxLicence == -1 || idxNom == -1 || idxPrenom == -1) {
                 return Result.failure(Exception("Format CSV non reconnu — colonnes manquantes"))
             }
@@ -73,27 +61,23 @@ object CdeVivierParser {
 
                 val cols = ligne.split(separateur)
 
-                // Sécurité : on ignore les lignes trop courtes
                 if (cols.size < headers.size - 5) { ligne = reader.readLine(); continue }
 
                 fun col(idx: Int) = if (idx >= 0 && idx < cols.size) cols[idx].trim() else ""
 
                 val categorie = col(idxCategorie)
-                    .replace("é", "e")  // nettoyage encodage
+                    .replace("é", "e")
                     .uppercase()
 
-                // Filtre catégorie si demandé
                 if (categorieAttendue != null && categorie != categorieAttendue) {
                     ligne = reader.readLine()
                     continue
                 }
 
-                // Parse du club : "0077976 US ALBENASSIENNE V.B." → code + nom
                 val clubRaw = col(idxClub)
                 val clubCode = clubRaw.take(7).trim()
                 val clubNom = if (clubRaw.length > 8) clubRaw.drop(8).trim() else clubRaw
 
-                // Nettoyage encodage FFVB (caractères spéciaux mal encodés)
                 fun nettoyerTexte(s: String): String = s
                     .replace("Ã©", "é").replace("Ã¨", "è").replace("Ã ", "à")
                     .replace("Ã´", "ô").replace("Ã®", "î").replace("Ã¢", "â")
@@ -102,13 +86,20 @@ object CdeVivierParser {
                     .replace("Ã¯", "ï").replace("Ã«", "ë")
                     .replace("Ã¼", "ü").replace("Ãö", "ö")
 
+                // Normalisation du sexe : "Masc" → "M", "Fém." → "F"
+                val sexe = when {
+                    col(idxSexe).trim().startsWith("M", ignoreCase = true) -> "M"
+                    col(idxSexe).trim().startsWith("F", ignoreCase = true) -> "F"
+                    else -> col(idxSexe).trim()
+                }
+
                 val joueur = JoueurVivier(
                     numLicence    = col(idxLicence),
                     nom           = nettoyerTexte(col(idxNom)),
                     prenom        = nettoyerTexte(col(idxPrenom)),
                     dateNaissance = col(idxNaissance),
                     categorie     = categorie,
-                    sexe          = col(idxSexe),
+                    sexe          = sexe,
                     taille        = col(idxTaille).toIntOrNull() ?: 0,
                     nationalite   = col(idxNationalite),
                     clubCode      = clubCode,
@@ -116,7 +107,6 @@ object CdeVivierParser {
                     estSurclasse  = col(idxSurclasse).trim().uppercase() == "S"
                 )
 
-                // On ignore les lignes sans numéro de licence valide
                 if (joueur.numLicence.isNotBlank() && joueur.nom.isNotBlank()) {
                     joueurs.add(joueur)
                 }
@@ -129,10 +119,6 @@ object CdeVivierParser {
         }
     }
 
-    /**
-     * Envoie les joueurs parsés vers Supabase (table cde_vivier)
-     * Utilise UPSERT pour ne pas dupliquer les licences existantes
-     */
     suspend fun syncVersSupabase(
         joueurs: List<JoueurVivier>,
         saison: String = "2026-2027"
@@ -158,7 +144,6 @@ object CdeVivierParser {
                     )
                 }
 
-                // Upsert
                 SupabaseManager.db
                     .from("cde_vivier")
                     .upsert(rows, onConflict = "num_licence,saison")
@@ -170,9 +155,6 @@ object CdeVivierParser {
         }
     }
 
-    /**
-     * Statistiques rapides après import
-     */
     fun stats(joueurs: List<JoueurVivier>): Map<String, Int> {
         return joueurs
             .groupBy { it.categorie }

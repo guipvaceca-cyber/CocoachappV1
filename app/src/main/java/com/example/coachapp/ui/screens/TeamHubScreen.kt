@@ -1,7 +1,6 @@
 package com.example.coachapp.ui.screens
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -21,8 +20,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.coachapp.data.*
-import java.text.SimpleDateFormat
+import com.example.coachapp.data.SeasonConfig
+import com.example.coachapp.data.TrainingSchedule
+import com.example.coachapp.data.model.Collectif
+import com.example.coachapp.ui.president.PresidentViewModel
+import com.example.coachapp.ui.president.PresidentUiState
+import kotlinx.coroutines.launch
 import java.time.DayOfWeek
 import java.time.LocalTime
 import java.time.format.TextStyle
@@ -31,389 +34,332 @@ import java.util.*
 @Composable
 fun TeamHubScreen(
     modifier: Modifier = Modifier,
+    viewModel: PresidentViewModel,
     seasonConfig: SeasonConfig,
-    onUpdateConfig: (SeasonConfig) -> Unit,
-    onUpdatePlayer: (Player) -> Unit,
-    onDeletePlayer: (String) -> Unit,
-    onAddAssessment: (String, PlayerAssessment) -> Unit
+    onUpdateConfig: (SeasonConfig) -> Unit
 ) {
-    var expandedSection by remember { mutableStateOf("PLAYERS") }
+    val uiState by viewModel.uiState.collectAsState()
+    val clubPlanning by viewModel.clubPlanning.collectAsState()
+    var selectedCollectifForEffectif by remember { mutableStateOf<Collectif?>(null) }
+    var selectedCollectifForSchedule by remember { mutableStateOf<Collectif?>(null) }
+    val scope = rememberCoroutineScope()
+    val snackbarHostState = remember { SnackbarHostState() }
 
-    Column(modifier = modifier.fillMaxSize().padding(16.dp).verticalScroll(rememberScrollState())) {
-        Text("Mes Collectifs", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Black)
-        Text("Gestion des groupes, joueurs et plannings.", style = MaterialTheme.typography.bodyMedium, color = Color.Gray)
-        
-        Spacer(modifier = Modifier.height(24.dp))
-
-        ProfileExpandableSection(
-            title = "Joueurs & Effectifs",
-            description = "Gérez vos licenciés, postes et bilans de paliers.",
-            icon = Icons.Default.Groups,
-            isExpanded = expandedSection == "PLAYERS",
-            onToggle = { expandedSection = if (expandedSection == "PLAYERS") "" else "PLAYERS" }
-        ) {
-            TeamScreenContent(seasonConfig, onUpdatePlayer, onDeletePlayer, onAddAssessment)
-        }
-
-        Spacer(modifier = Modifier.height(12.dp))
-
-        ProfileExpandableSection(
-            title = "Gestion des Catégories",
-            description = "Ajoutez ou modifiez vos équipes (M13, Seniors, etc.).",
-            icon = Icons.Default.Settings,
-            isExpanded = expandedSection == "TEAMS",
-            onToggle = { expandedSection = if (expandedSection == "TEAMS") "" else "TEAMS" }
-        ) {
-            var showAddTeam by remember { mutableStateOf(false) }
-            TeamManager(seasonConfig, onUpdateConfig, onAddClick = { showAddTeam = true })
-            if (showAddTeam) {
-                AddTeamDialog(onDismiss = { showAddTeam = false }, onConfirm = { onUpdateConfig(seasonConfig.copy(teams = seasonConfig.teams + it)); showAddTeam = false })
+    if (selectedCollectifForEffectif != null) {
+        android.util.Log.d("DIAG_PRESIDENT", "Navigation vers collectif: clubCode=${viewModel.clubCode}")
+        CollectifDetailScreen(
+            collectifId = selectedCollectifForEffectif!!.id,
+            collectifNom = selectedCollectifForEffectif!!.nom,
+            collectifFormat = selectedCollectifForEffectif!!.format,
+            collectifSexe = selectedCollectifForEffectif!!.sexe,
+            categorieCoach = selectedCollectifForEffectif!!.categorie,
+            clubId = selectedCollectifForEffectif!!.clubId,
+            clubCode = viewModel.clubCode ?: "",
+            viewModel = viewModel,
+            onBack = { 
+                selectedCollectifForEffectif = null 
+                viewModel.chargerCollectifs() 
             }
-        }
+        )
+    } else {
+        Scaffold(
+            modifier = modifier.fillMaxSize(),
+            snackbarHost = { SnackbarHost(snackbarHostState) }
+        ) { padding ->
+            Column(modifier = Modifier.padding(padding).padding(16.dp)) {
+                Text("Mes Collectifs", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Black)
+                Text("Gérez les effectifs et plannings de vos équipes.", style = MaterialTheme.typography.bodyMedium, color = Color.Gray)
+                
+                Spacer(modifier = Modifier.height(24.dp))
 
-        Spacer(modifier = Modifier.height(12.dp))
-
-        ProfileExpandableSection(
-            title = "Planning Hebdomadaire",
-            description = "Définissez les créneaux récurrents de vos équipes.",
-            icon = Icons.Default.DateRange,
-            isExpanded = expandedSection == "SCHEDULE",
-            onToggle = { expandedSection = if (expandedSection == "SCHEDULE") "" else "SCHEDULE" }
-        ) {
-            var showAddTraining by remember { mutableStateOf(false) }
-            ScheduleManager(seasonConfig, onUpdateConfig, onAddClick = { showAddTraining = true })
-            if (showAddTraining) {
-                AddTrainingScheduleDialog(teams = seasonConfig.teams, onDismiss = { showAddTraining = false }, onConfirm = { onUpdateConfig(seasonConfig.copy(trainingSchedules = seasonConfig.trainingSchedules + it)); showAddTraining = false })
-            }
-        }
-        
-        Spacer(modifier = Modifier.height(100.dp))
-    }
-}
-
-@Composable
-fun TeamScreenContent(
-    seasonConfig: SeasonConfig,
-    onUpdatePlayer: (Player) -> Unit,
-    onDeletePlayer: (String) -> Unit,
-    onAddAssessment: (String, PlayerAssessment) -> Unit
-) {
-    var selectedTeamId by remember { mutableStateOf(seasonConfig.teams.firstOrNull()?.id) }
-    val selectedTeam = seasonConfig.teams.find { it.id == selectedTeamId }
-    var showAddPlayer by remember { mutableStateOf(false) }
-    var playerToEdit by remember { mutableStateOf<Player?>(null) }
-    var selectedPlayerForReview by remember { mutableStateOf<Player?>(null) }
-
-    Column {
-        if (seasonConfig.teams.isNotEmpty()) {
-            ScrollableTabRow(selectedTabIndex = seasonConfig.teams.indexOf(selectedTeam).coerceAtLeast(0), edgePadding = 0.dp, containerColor = Color.Transparent, divider = {}) {
-                seasonConfig.teams.forEach { team ->
-                    Tab(selected = selectedTeamId == team.id, onClick = { selectedTeamId = team.id }) {
-                        Text(team.name, modifier = Modifier.padding(12.dp), fontSize = 12.sp)
+                when (val state = uiState) {
+                    is PresidentUiState.Loading -> {
+                        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                            CircularProgressIndicator()
+                        }
                     }
-                }
-            }
-            
-            Spacer(Modifier.height(16.dp))
-            
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                Text("Effectif", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                IconButton(onClick = { showAddPlayer = true }) { Icon(Icons.Default.PersonAdd, null, tint = MaterialTheme.colorScheme.primary) }
-            }
-
-            val teamPlayers = seasonConfig.players.filter { it.teamId == selectedTeamId }
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                teamPlayers.forEach { player ->
-                    PlayerCard(
-                        player = player, 
-                        seasonConfig = seasonConfig, 
-                        onDelete = { onDeletePlayer(player.id) },
-                        onEditClick = { playerToEdit = player },
-                        onReviewClick = { selectedPlayerForReview = player }
-                    )
-                }
-            }
-            
-            Spacer(Modifier.height(16.dp))
-            OutlinedButton(onClick = { if (selectedTeamId != null) importTestData(selectedTeamId!!, selectedTeam?.name ?: "", onUpdatePlayer) }, modifier = Modifier.fillMaxWidth()) {
-                Text("Import Test JSON (Discriminé)", fontSize = 11.sp)
-            }
-        } else {
-            Text("Créez d'abord une équipe dans l'onglet 'Gestion des Catégories'.", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
-        }
-    }
-
-    if (showAddPlayer && selectedTeamId != null) {
-        PlayerDialog(teamId = selectedTeamId!!, onDismiss = { showAddPlayer = false }, onConfirm = { onUpdatePlayer(it); showAddPlayer = false })
-    }
-    if (playerToEdit != null) {
-        PlayerDialog(teamId = playerToEdit!!.teamId, player = playerToEdit, onDismiss = { playerToEdit = null }, onConfirm = { onUpdatePlayer(it); playerToEdit = null })
-    }
-    if (selectedPlayerForReview != null) {
-        PlayerReviewDialog(player = selectedPlayerForReview!!, onDismiss = { selectedPlayerForReview = null }, onConfirm = { onAddAssessment(selectedPlayerForReview!!.id, it); selectedPlayerForReview = null })
-    }
-}
-
-@Composable
-fun PlayerDialog(teamId: String, player: Player? = null, onDismiss: () -> Unit, onConfirm: (Player) -> Unit) {
-    var firstName by remember { mutableStateOf(player?.firstName ?: "") }
-    var lastName by remember { mutableStateOf(player?.lastName ?: "") }
-    var number by remember { mutableStateOf(player?.number?.toString() ?: "") }
-    var license by remember { mutableStateOf(player?.licenseNumber ?: "") }
-    var birthYear by remember { mutableStateOf(player?.birthYear?.toString() ?: "") }
-    var position by remember { mutableStateOf(player?.position ?: "Réceptionneur-Attaquant") }
-    var yearsOfPractice by remember { mutableStateOf(player?.yearsOfPractice?.toString() ?: "0") }
-    var category by remember { mutableStateOf(player?.category ?: "M13") }
-    var categoryYear by remember { mutableIntStateOf(player?.categoryYear ?: 1) }
-    val positions = listOf("Passeur", "Pointu", "Central", "Réceptionneur-Attaquant", "Libero")
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(if (player == null) "Nouveau Joueur" else "Modifier") },
-        text = {
-            Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
-                OutlinedTextField(value = firstName, onValueChange = { firstName = it }, label = { Text("Prénom") })
-                OutlinedTextField(value = lastName, onValueChange = { lastName = it }, label = { Text("Nom") })
-                OutlinedTextField(value = number, onValueChange = { number = it }, label = { Text("Numéro") })
-                OutlinedTextField(value = license, onValueChange = { license = it }, label = { Text("Licence") })
-                OutlinedTextField(value = birthYear, onValueChange = { birthYear = it }, label = { Text("Année Naissance") })
-                Text("Poste :")
-                Row { positions.take(3).forEach { p -> FilterChip(selected = position == p, onClick = { position = p }, label = { Text(p.take(3)) }) } }
-                OutlinedTextField(value = yearsOfPractice, onValueChange = { yearsOfPractice = it }, label = { Text("Années Pratique") })
-            }
-        },
-        confirmButton = { Button(onClick = { onConfirm(Player(player?.id ?: UUID.randomUUID().toString(), teamId, firstName, lastName, number.toIntOrNull() ?: 0, position, license, birthYear.toIntOrNull() ?: 0, yearsOfPractice.toIntOrNull() ?: 0, category, categoryYear)) }) { Text("OK") } }
-    )
-}
-
-@Composable
-fun PlayerCard(player: Player, seasonConfig: SeasonConfig, onDelete: () -> Unit, onEditClick: () -> Unit, onReviewClick: () -> Unit) {
-    Card(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
-        Row(modifier = Modifier.padding(12.dp).clickable { onEditClick() }, verticalAlignment = Alignment.CenterVertically) {
-            Surface(shape = CircleShape, color = MaterialTheme.colorScheme.primaryContainer, modifier = Modifier.size(40.dp)) {
-                Box(contentAlignment = Alignment.Center) { Text("#${player.number}", fontWeight = FontWeight.Bold) }
-            }
-            Spacer(Modifier.width(16.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Text(player.fullName, fontWeight = FontWeight.Bold)
-                Text("${player.position} (${player.category})", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
-            }
-            IconButton(onClick = onReviewClick) { Icon(Icons.Default.TrendingUp, null, tint = MaterialTheme.colorScheme.primary) }
-            IconButton(onClick = onDelete) { Icon(Icons.Default.Delete, null, tint = MaterialTheme.colorScheme.error) }
-        }
-    }
-}
-
-@Composable
-fun PlayerReviewDialog(player: Player, onDismiss: () -> Unit, onConfirm: (PlayerAssessment) -> Unit) {
-    var tech by remember { mutableFloatStateOf(player.techScore.toFloat()) }
-    var tact by remember { mutableFloatStateOf(player.tactScore.toFloat()) }
-    var phys by remember { mutableFloatStateOf(player.physicalScore.toFloat()) }
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Bilan : ${player.fullName}") },
-        text = {
-            Column {
-                Text("Technique: ${tech.toInt()}"); Slider(value = tech, onValueChange = { tech = it }, valueRange = 0f..5f)
-                Text("Tactique: ${tact.toInt()}"); Slider(value = tact, onValueChange = { tact = it }, valueRange = 0f..5f)
-                Text("Physique: ${phys.toInt()}"); Slider(value = phys, onValueChange = { phys = it }, valueRange = 0f..5f)
-            }
-        },
-        confirmButton = { Button(onClick = { onConfirm(PlayerAssessment(System.currentTimeMillis(), "Mois", tech.toInt(), tact.toInt(), phys.toInt())) }) { Text("OK") } }
-    )
-}
-
-@Composable
-fun TeamManager(config: SeasonConfig, onUpdate: (SeasonConfig) -> Unit, onAddClick: () -> Unit) {
-    Column {
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            Text("Équipes", fontWeight = FontWeight.Bold)
-            IconButton(onClick = onAddClick) { Icon(Icons.Default.Add, null) }
-        }
-        config.teams.forEach { team ->
-            ListItem(headlineContent = { Text(team.name) }, leadingContent = { Box(Modifier.size(16.dp).background(team.color, CircleShape)) })
-        }
-    }
-}
-
-@Composable
-fun ScheduleManager(config: SeasonConfig, onUpdate: (SeasonConfig) -> Unit, onAddClick: () -> Unit) {
-    Column {
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-            Text("Plannings Hebdo", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-            IconButton(onClick = onAddClick) { Icon(Icons.Default.Add, null) }
-        }
-        config.trainingSchedules.forEach { schedule ->
-            val team = config.teams.find { it.id == schedule.teamId }
-            Card(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
-                Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(schedule.dayOfWeek.getDisplayName(TextStyle.FULL, Locale.FRENCH).uppercase(), fontWeight = FontWeight.Bold, fontSize = 12.sp)
-                        Text(team?.name ?: "Inconnu", style = MaterialTheme.typography.labelSmall, color = team?.color ?: Color.Gray)
+                    is PresidentUiState.Error -> {
+                        Text("Erreur : ${state.message}", color = MaterialTheme.colorScheme.error)
                     }
-                    Text("${schedule.startTime} (${schedule.durationMinutes} min)", fontSize = 11.sp)
-                    IconButton(onClick = {
-                        onUpdate(config.copy(trainingSchedules = config.trainingSchedules.filter { it != schedule }))
-                    }) { Icon(Icons.Default.Delete, null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(20.dp)) }
-                }
-            }
-        }
-    }
-}
+                    is PresidentUiState.Success -> {
+                        val userId = com.example.coachapp.data.SupabaseManager.auth.currentUserOrNull()?.id
+                        val mesCollectifs = state.collectifs.filter { detail ->
+                            detail.rattachements.any { it.coachId == userId }
+                        }
 
-@Composable
-fun AddTeamDialog(onDismiss: () -> Unit, onConfirm: (Team) -> Unit) {
-    var name by remember { mutableStateOf("") }
-    AlertDialog(onDismissRequest = onDismiss, title = { Text("Nouvelle Équipe") }, text = { OutlinedTextField(value = name, onValueChange = { name = it }) }, confirmButton = { Button(onClick = { onConfirm(Team(UUID.randomUUID().toString(), name, Color.Blue)) }) { Text("OK") } })
-}
+                        if (mesCollectifs.isEmpty()) {
+                            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                    Icon(Icons.Default.Groups, null, modifier = Modifier.size(64.dp), tint = Color.LightGray)
+                                    Spacer(Modifier.height(16.dp))
+                                    Text("Aucun collectif rattaché.", style = MaterialTheme.typography.titleMedium)
+                                    Text("Demandez à votre président ou rattachiez-vous depuis le Hub Président.", 
+                                        textAlign = TextAlign.Center, 
+                                        color = Color.Gray,
+                                        modifier = Modifier.padding(horizontal = 32.dp)
+                                    )
+                                }
+                            }
+                        } else {
+                            LazyColumn(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                                items(mesCollectifs) { detail ->
+                                    val schedules = seasonConfig.trainingSchedules.filter { it.teamId == detail.collectif.id }
+                                    
+                                    // Calcul couleur état (Rouge, Orange, Vert, Bleu)
+                                    val count = detail.joueurs.size
+                                    // TODO: Récupérer le vrai seuil min via formatLimite, en attendant on met 6 par défaut
+                                    val statusColor = when {
+                                        detail.collectif.statut == com.example.coachapp.data.model.CollectifStatut.EN_ATTENTE_CT -> Color(0xFF2196F3) // Bleu
+                                        count >= 6 -> Color(0xFF4CAF50) // Vert (Quota atteint théorique)
+                                        count > 0 -> Color(0xFFFF9800) // Orange (En cours)
+                                        else -> Color(0xFFF44336) // Rouge (Vide)
+                                    }
 
-@Composable
-fun AddTrainingScheduleDialog(teams: List<Team>, onDismiss: () -> Unit, onConfirm: (List<TrainingSchedule>) -> Unit) {
-    val selectedDays = remember { mutableStateListOf<DayOfWeek>() }
-    var selectedTeamId by remember { mutableStateOf(teams.firstOrNull()?.id ?: "") }
-    var startHour by remember { mutableStateOf("18") }
-    var startMinute by remember { mutableStateOf("30") }
-    var endHour by remember { mutableStateOf("20") }
-    var endMinute by remember { mutableStateOf("00") }
+                                    Column {
+                                        CollectifCoachCard(
+                                            collectif = detail.collectif,
+                                            statusColor = statusColor,
+                                            onClick = { selectedCollectifForEffectif = detail.collectif }
+                                        )
+                                        
+                                        if (schedules.isNotEmpty()) {
+                                            Row(
+                                                modifier = Modifier.fillMaxWidth().padding(top = 4.dp, start = 8.dp),
+                                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                            ) {
+                                                schedules.forEach { s ->
+                                                    Surface(
+                                                        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f),
+                                                        shape = RoundedCornerShape(4.dp)
+                                                    ) {
+                                                        Text(
+                                                            "${s.dayOfWeek.getDisplayName(TextStyle.SHORT, Locale.FRENCH)} ${s.startTime}",
+                                                            fontSize = 10.sp,
+                                                            modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
+                                                        )
+                                                    }
+                                                }
+                                            }
+                                        }
 
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Nouveaux créneaux réguliers") },
-        text = {
-            Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
-                Text("Équipe :", style = MaterialTheme.typography.labelSmall)
-                teams.forEach { team ->
-                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.clickable { selectedTeamId = team.id }) {
-                        RadioButton(selected = selectedTeamId == team.id, onClick = { selectedTeamId = team.id })
-                        Text(team.name)
-                    }
-                }
-                Spacer(Modifier.height(16.dp))
-                Text("Jours (sélectionnez-en plusieurs) :", style = MaterialTheme.typography.labelSmall)
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceAround) {
-                    DayOfWeek.entries.take(7).forEach { day ->
-                        val isSelected = selectedDays.contains(day)
-                        Surface(
-                            modifier = Modifier.size(32.dp).clickable { 
-                                if (isSelected) selectedDays.remove(day) else selectedDays.add(day)
-                            },
-                            color = if (isSelected) MaterialTheme.colorScheme.primary else Color.Transparent,
-                            shape = CircleShape,
-                            border = if (!isSelected) androidx.compose.foundation.BorderStroke(1.dp, Color.Gray) else null
-                        ) {
-                            Box(contentAlignment = Alignment.Center) {
-                                Text(day.getDisplayName(TextStyle.NARROW, Locale.FRENCH), color = if (isSelected) Color.White else Color.Unspecified)
+                                        TextButton(
+                                            onClick = { selectedCollectifForSchedule = detail.collectif },
+                                            modifier = Modifier.padding(top = 2.dp),
+                                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
+                                        ) {
+                                            Icon(Icons.Default.Schedule, null, modifier = Modifier.size(16.dp))
+                                            Spacer(Modifier.width(8.dp))
+                                            Text(
+                                                "Indiquer les horaires et jours récurrents d'entrainement",
+                                                fontSize = 12.sp,
+                                                textAlign = TextAlign.Start
+                                            )
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
                 }
-                Spacer(Modifier.height(16.dp))
-                Text("Horaires communs :", style = MaterialTheme.typography.labelSmall)
-                
+            }
+        }
+    }
+
+    if (selectedCollectifForSchedule != null) {
+        val currentSchedules = seasonConfig.trainingSchedules.filter { it.teamId == selectedCollectifForSchedule!!.id }
+        
+        AddTrainingScheduleDialog(
+            collectifNom = selectedCollectifForSchedule!!.nom,
+            currentSchedules = currentSchedules,
+            clubPlanning = clubPlanning,
+            onDismiss = { selectedCollectifForSchedule = null },
+            onConfirm = { newSchedules ->
+                // 1. Mise à jour Supabase
+                newSchedules.forEach { s ->
+                    viewModel.enregistrerPlanning(
+                        s.copy(teamId = selectedCollectifForSchedule!!.id),
+                        onSuccess = {},
+                        onError = { scope.launch { snackbarHostState.showSnackbar(it) } }
+                    )
+                }
+
+                // 2. Mise à jour locale (pour affichage immédiat)
+                val otherTeamsSchedules = seasonConfig.trainingSchedules.filter { it.teamId != selectedCollectifForSchedule!!.id }
+                val schedulesWithId = newSchedules.map { it.copy(teamId = selectedCollectifForSchedule!!.id) }
+                onUpdateConfig(seasonConfig.copy(trainingSchedules = otherTeamsSchedules + schedulesWithId))
+                selectedCollectifForSchedule = null
+            }
+        )
+    }
+}
+
+@Composable
+fun CollectifCoachCard(
+    collectif: Collectif,
+    statusColor: Color,
+    onClick: () -> Unit
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth().clickable { onClick() },
+        shape = RoundedCornerShape(12.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+    ) {
+        Column {
+            // Bandeau de titre colorisé
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(statusColor)
+                    .padding(horizontal = 16.dp, vertical = 8.dp)
+            ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("Début : ", style = MaterialTheme.typography.bodySmall, modifier = Modifier.width(60.dp))
-                    OutlinedTextField(value = startHour, onValueChange = { if(it.length <= 2) startHour = it }, modifier = Modifier.width(65.dp), label = { Text("HH") })
-                    Text(" : ", modifier = Modifier.padding(horizontal = 4.dp))
-                    OutlinedTextField(value = startMinute, onValueChange = { if(it.length <= 2) startMinute = it }, modifier = Modifier.width(65.dp), label = { Text("mm") })
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "${collectif.categorie} ${if(collectif.sexe == "M") "Masculin" else "Féminin"}",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White
+                        )
+                        Text(collectif.nom, style = MaterialTheme.typography.bodySmall, color = Color.White.copy(alpha = 0.8f))
+                    }
+                    Icon(Icons.Default.ChevronRight, null, tint = Color.White)
+                }
+            }
+            // On pourrait ajouter un petit récap ici si besoin, 
+            // mais l'utilisateur a demandé à garder la structure actuelle
+        }
+    }
+}
+
+@Composable
+fun AddTrainingScheduleDialog(
+    collectifNom: String,
+    currentSchedules: List<TrainingSchedule>,
+    clubPlanning: List<TrainingSchedule> = emptyList(),
+    onDismiss: () -> Unit,
+    onConfirm: (List<TrainingSchedule>) -> Unit
+) {
+    val selectedDays = remember { mutableStateListOf<DayOfWeek>() }
+    var startHour by remember { mutableStateOf("18") }
+    var startMinute by remember { mutableStateOf("30") }
+    var endHour by remember { mutableStateOf("20") }
+    var endMinute by remember { mutableStateOf("00") }
+    var selectedTerrain by remember { mutableStateOf("Terrain 1") }
+    val terrains = listOf("Terrain 1", "Terrain 2", "Terrain 3", "Central")
+
+    LaunchedEffect(currentSchedules) {
+        if (currentSchedules.isNotEmpty()) {
+            selectedDays.clear()
+            currentSchedules.forEach { selectedDays.add(it.dayOfWeek) }
+            val first = currentSchedules.first()
+            startHour = first.startTime.hour.toString().padStart(2, '0')
+            startMinute = first.startTime.minute.toString().padStart(2, '0')
+            selectedTerrain = first.terrain ?: "Terrain 1"
+        }
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Horaires récurrents : $collectifNom") },
+        text = {
+            Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
+                Text("Terrain :", style = MaterialTheme.typography.labelSmall)
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    terrains.forEach { t ->
+                        FilterChip(
+                            selected = selectedTerrain == t,
+                            onClick = { selectedTerrain = t },
+                            label = { Text(t, fontSize = 10.sp) }
+                        )
+                    }
+                }
+
+                Spacer(Modifier.height(16.dp))
+                Text("Sélectionnez les jours d'entraînement :", style = MaterialTheme.typography.labelSmall)
+                Spacer(Modifier.height(12.dp))
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceAround) {
+                    DayOfWeek.entries.take(7).forEach { day ->
+                        val isSelected = selectedDays.contains(day)
+                        
+                        // Détection de conflit simple
+                        val hasConflict = clubPlanning.any { 
+                            it.dayOfWeek == day && it.terrain == selectedTerrain
+                        }
+
+                        Surface(
+                            modifier = Modifier.size(36.dp).clickable { 
+                                if (isSelected) selectedDays.remove(day) else selectedDays.add(day)
+                            },
+                            color = if (isSelected) MaterialTheme.colorScheme.primary 
+                                    else if (hasConflict) Color(0xFFFFEBEE)
+                                    else Color.Transparent,
+                            shape = CircleShape,
+                            border = androidx.compose.foundation.BorderStroke(1.dp, if (hasConflict) Color.Red.copy(alpha = 0.5f) else Color.Gray)
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Text(
+                                    day.getDisplayName(TextStyle.NARROW, Locale.FRENCH), 
+                                    color = if (isSelected) Color.White else if (hasConflict) Color.Red else Color.Unspecified,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
+                    }
                 }
                 
+                if (clubPlanning.isNotEmpty()) {
+                    Text("Les jours en rouge sont déjà occupés sur ce terrain par d'autres équipes.", 
+                         style = MaterialTheme.typography.labelSmall, color = Color.Gray, fontSize = 9.sp)
+                }
+                
+                Spacer(Modifier.height(24.dp))
+                Text("Horaires habituels :", style = MaterialTheme.typography.labelSmall)
                 Spacer(Modifier.height(8.dp))
                 
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("Fin : ", style = MaterialTheme.typography.bodySmall, modifier = Modifier.width(60.dp))
-                    OutlinedTextField(value = endHour, onValueChange = { if(it.length <= 2) endHour = it }, modifier = Modifier.width(65.dp), label = { Text("HH") })
+                    Text("Début : ", style = MaterialTheme.typography.bodySmall, modifier = Modifier.width(60.dp))
+                    OutlinedTextField(value = startHour, onValueChange = { if(it.length <= 2) startHour = it }, modifier = Modifier.width(70.dp), label = { Text("HH") })
                     Text(" : ", modifier = Modifier.padding(horizontal = 4.dp))
-                    OutlinedTextField(value = endMinute, onValueChange = { if(it.length <= 2) endMinute = it }, modifier = Modifier.width(65.dp), label = { Text("mm") })
+                    OutlinedTextField(value = startMinute, onValueChange = { if(it.length <= 2) startMinute = it }, modifier = Modifier.width(70.dp), label = { Text("mm") })
+                }
+                
+                Spacer(Modifier.height(12.dp))
+                
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("Fin : ", style = MaterialTheme.typography.bodySmall, modifier = Modifier.width(60.dp))
+                    OutlinedTextField(value = endHour, onValueChange = { if(it.length <= 2) endHour = it }, modifier = Modifier.width(70.dp), label = { Text("HH") })
+                    Text(" : ", modifier = Modifier.padding(horizontal = 4.dp))
+                    OutlinedTextField(value = endMinute, onValueChange = { if(it.length <= 2) endMinute = it }, modifier = Modifier.width(70.dp), label = { Text("mm") })
                 }
             }
         },
         confirmButton = {
             Button(
                 onClick = {
-                    try {
-                        val startTime = LocalTime.of(startHour.toInt(), startMinute.toInt())
-                        val endTime = LocalTime.of(endHour.toInt(), endMinute.toInt())
-                        var duration = java.time.Duration.between(startTime, endTime).toMinutes().toInt()
-                        if (duration < 0) duration += 24 * 60
-                        val schedules = selectedDays.map { TrainingSchedule(selectedTeamId, dayOfWeek = it, startTime = startTime, durationMinutes = duration) }
-                        onConfirm(schedules)
-                    } catch (e: Exception) {}
+                    val sH = startHour.toIntOrNull() ?: 18
+                    val sM = startMinute.toIntOrNull() ?: 30
+                    val eH = endHour.toIntOrNull() ?: 20
+                    val eM = endMinute.toIntOrNull() ?: 0
+                    
+                    val startTime = LocalTime.of(sH, sM)
+                    val endTime = LocalTime.of(eH, eM)
+                    var duration = java.time.Duration.between(startTime, endTime).toMinutes().toInt()
+                    if (duration < 0) duration += 24 * 60
+                    
+                    val schedules = selectedDays.map { day ->
+                        TrainingSchedule(
+                            teamId = "", 
+                            dayOfWeek = day,
+                            startTime = startTime,
+                            durationMinutes = duration,
+                            terrain = selectedTerrain
+                        )
+                    }
+                    onConfirm(schedules)
                 }, 
-                enabled = selectedTeamId.isNotBlank() && selectedDays.isNotEmpty()
-            ) { Text("Ajouter") }
+                enabled = selectedDays.isNotEmpty()
+            ) { Text("Enregistrer") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Annuler") } }
     )
-}
-
-fun importTestData(teamId: String, teamName: String, onUpdatePlayer: (Player) -> Unit) {
-    val teamCategory = when {
-        teamName.contains("M13", ignoreCase = true) -> "M13"
-        teamName.contains("M15", ignoreCase = true) -> "M15"
-        teamName.contains("M18", ignoreCase = true) -> "M18"
-        teamName.contains("M21", ignoreCase = true) -> "M21"
-        teamName.contains("Senior", ignoreCase = true) -> "Senior"
-        else -> null
-    }
-
-    val json = """
-    {
-      "players": [
-        { "firstName": "Léo", "lastName": "Martin", "number": 12, "license": "AUVR-2026-45821", "position": "Réceptionneur-Attaquant", "yearsOfPractice": 8, "birthYear": 2010, "category": "M18", "categoryYear": 1 },
-        { "firstName": "Nolan", "lastName": "Dupuis", "number": 7, "license": "AUVR-2026-44712", "position": "Passeur", "yearsOfPractice": 6, "birthYear": 2009, "category": "M18", "categoryYear": 2 },
-        { "firstName": "Mathis", "lastName": "Roche", "number": 3, "license": "AUVR-2026-46211", "position": "Pointu", "yearsOfPractice": 4, "birthYear": 2011, "category": "M15", "categoryYear": 1 },
-        { "firstName": "Enzo", "lastName": "Bardet", "number": 9, "license": "AUVR-2026-44198", "position": "Central", "yearsOfPractice": 5, "birthYear": 2010, "category": "M18", "categoryYear": 1 },
-        { "firstName": "Tom", "lastName": "Garnier", "number": 1, "license": "AUVR-2026-43012", "position": "Libéro", "yearsOfPractice": 7, "birthYear": 2007, "category": "M21", "categoryYear": 1 },
-        { "firstName": "Axel", "lastName": "Morel", "number": 14, "license": "AUVR-2026-47812", "position": "Réceptionneur-Attaquant", "yearsOfPractice": 3, "birthYear": 2012, "category": "M15", "categoryYear": 2 },
-        { "firstName": "Julien", "lastName": "Carrel", "number": 5, "license": "AUVR-2026-45571", "position": "Central", "yearsOfPractice": 9, "birthYear": 2004, "category": "Senior", "categoryYear": 1 },
-        { "firstName": "Maxime", "lastName": "Leroux", "number": 11, "license": "AUVR-2026-49017", "position": "Passeur", "yearsOfPractice": 10, "birthYear": 2003, "category": "Senior", "categoryYear": 3 },
-        { "firstName": "Evan", "lastName": "Rigal", "number": 4, "license": "AUVR-2026-47201", "position": "Libéro", "yearsOfPractice": 2, "birthYear": 2013, "category": "M13", "categoryYear": 1 },
-        { "firstName": "Sacha", "lastName": "Bonnard", "number": 10, "license": "AUVR-2026-48214", "position": "Pointu", "yearsOfPractice": 3, "birthYear": 2012, "category": "M13", "categoryYear": 2 },
-        { "firstName": "Hugo", "lastName": "Lambert", "number": 6, "license": "AUVR-2026-49321", "position": "Central", "yearsOfPractice": 6, "birthYear": 2009, "category": "M18", "categoryYear": 2 },
-        { "firstName": "Théo", "lastName": "Giraud", "number": 8, "license": "AUVR-2026-49912", "position": "Réceptionneur-Attaquant", "yearsOfPractice": 5, "birthYear": 2010, "category": "M18", "categoryYear": 1 },
-        { "firstName": "Lucas", "lastName": "Perrin", "number": 13, "license": "AUVR-2026-48871", "position": "Passeur", "yearsOfPractice": 4, "birthYear": 2011, "category": "M15", "categoryYear": 1 },
-        { "firstName": "Eliott", "lastName": "Masson", "number": 2, "license": "AUVR-2026-47112", "position": "Libéro", "yearsOfPractice": 7, "birthYear": 2008, "category": "M21", "categoryYear": 2 },
-        { "firstName": "Rayan", "lastName": "Collet", "number": 15, "license": "AUVR-2026-46512", "position": "Pointu", "yearsOfPractice": 1, "birthYear": 2013, "category": "M13", "categoryYear": 1 },
-        { "firstName": "Maël", "lastName": "Durand", "number": 16, "license": "AUVR-2026-48012", "position": "Central", "yearsOfPractice": 8, "birthYear": 2007, "category": "M21", "categoryYear": 1 },
-        { "firstName": "Antoine", "lastName": "Fabre", "number": 17, "license": "AUVR-2026-49211", "position": "Réceptionneur-Attaquant", "yearsOfPractice": 9, "birthYear": 2006, "category": "M21", "categoryYear": 2 },
-        { "firstName": "Clément", "lastName": "Renaud", "number": 18, "license": "AUVR-2026-47712", "position": "Passeur", "yearsOfPractice": 11, "birthYear": 2004, "category": "Senior", "categoryYear": 1 },
-        { "firstName": "Baptiste", "lastName": "Gros", "number": 19, "license": "AUVR-2026-48612", "position": "Libéro", "yearsOfPractice": 3, "birthYear": 2012, "category": "M15", "categoryYear": 2 },
-        { "firstName": "Valentin", "lastName": "Chevalier", "number": 20, "license": "AUVR-2026-48912", "position": "Pointu", "yearsOfPractice": 6, "birthYear": 2009, "category": "M18", "categoryYear": 2 }
-      ]
-    }
-    """.trimIndent()
-
-    try {
-        val obj = org.json.JSONObject(json)
-        val arr = obj.getJSONArray("players")
-        for (i in 0 until arr.length()) {
-            val p = arr.getJSONObject(i)
-            val pCategory = p.getString("category")
-            
-            val isEligible = when(teamCategory) {
-                "M13" -> pCategory == "M13"
-                "M15" -> pCategory == "M15" || pCategory == "M13"
-                "M18" -> pCategory == "M18" || pCategory == "M15" || pCategory == "M13"
-                "M21" -> pCategory == "M21" || pCategory == "M18" || pCategory == "M15"
-                "Senior" -> true 
-                else -> true 
-            }
-
-            if (isEligible) {
-                onUpdatePlayer(Player(
-                    id = UUID.randomUUID().toString(),
-                    teamId = teamId,
-                    firstName = p.getString("firstName"),
-                    lastName = p.getString("lastName"),
-                    number = p.getInt("number"),
-                    position = p.getString("position"),
-                    licenseNumber = p.getString("license"),
-                    yearsOfPractice = p.getInt("yearsOfPractice"),
-                    birthYear = p.getInt("birthYear"),
-                    category = pCategory,
-                    categoryYear = p.getInt("categoryYear")
-                ))
-            }
-        }
-    } catch (e: Exception) {}
 }

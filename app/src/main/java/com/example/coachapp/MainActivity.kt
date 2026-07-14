@@ -45,6 +45,17 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun CoachAppApp(viewModel: CoachViewModel = viewModel()) {
     val persistenceManager = remember { PersistenceManager(viewModel.getApplication()) }
+    val presidentViewModel: com.example.coachapp.ui.president.PresidentViewModel = viewModel(
+        factory = com.example.coachapp.ui.president.PresidentViewModelFactory(
+            com.example.coachapp.data.repository.PresidentRepository(com.example.coachapp.data.SupabaseManager.client)
+        )
+    )
+    val playerViewModel: com.example.coachapp.ui.player.PlayerViewModel = viewModel(
+        factory = com.example.coachapp.ui.player.PlayerViewModelFactory(
+            com.example.coachapp.data.repository.PresidentRepository(com.example.coachapp.data.SupabaseManager.client)
+        )
+    )
+
     var currentDestination by rememberSaveable { mutableStateOf(AppDestinations.DASHBOARD) }
     var isLaunchingTerrain by remember { mutableStateOf(false) }
 
@@ -56,10 +67,23 @@ fun CoachAppApp(viewModel: CoachViewModel = viewModel()) {
             onSignUp = { email, pass -> viewModel.signUp(email, pass) },
             onDismissError = { viewModel.clearAuthError() }
         )
+    } else if (viewModel.isFetchingProfile) {
+        // Écran d'attente pendant que le profil Patrick Robin descend de Supabase
+        Box(modifier = Modifier.fillMaxSize(), contentAlignment = androidx.compose.ui.Alignment.Center) {
+            Column(horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally) {
+                CircularProgressIndicator()
+                Spacer(Modifier.height(16.dp))
+                Text("Récupération de votre profil...", style = MaterialTheme.typography.bodyMedium)
+            }
+        }
     } else if (!viewModel.seasonConfig.isOnboardingCompleted) {
-        OnboardingScreen(onCompleted = { config ->
-            viewModel.completeOnboarding(config)
-        })
+        OnboardingScreen(
+            initialConfig = viewModel.seasonConfig,
+            pendingInvitations = viewModel.pendingInvitations,
+            onCompleted = { config ->
+                viewModel.completeOnboarding(config)
+            }
+        )
     } else if (isLaunchingTerrain) {
         TerrainLaunchScreen(onAnimationFinish = { isLaunchingTerrain = false })
     } else {
@@ -154,6 +178,7 @@ fun CoachAppApp(viewModel: CoachViewModel = viewModel()) {
                                     }
                                     "INSIGHTS" -> currentDestination = AppDestinations.INSIGHTS
                                     "PROFILE" -> currentDestination = AppDestinations.PROFILE
+                                    "COPLAYER_PLANNING" -> currentDestination = AppDestinations.COPLAYER_PLANNING
                                     "DIAGNOSTIC_FLASH" -> {
                                         viewModel.currentAssessmentType = com.example.coachapp.data.AssessmentType.FLASH
                                         currentDestination = AppDestinations.DIAGNOSTIC
@@ -174,7 +199,8 @@ fun CoachAppApp(viewModel: CoachViewModel = viewModel()) {
                             modifier = modifier,
                             persistenceManager = persistenceManager,
                             seasonConfig = viewModel.seasonConfig,
-                            viewModel =viewModel,
+                            viewModel = viewModel,
+                            presidentViewModel = presidentViewModel,
                             onUseHelp = { viewModel.useHelp() },
                             helpUsageCount = viewModel.getHelpUsageCountThisMonth(),
                             onNavigateToPreparer = { session ->
@@ -191,14 +217,14 @@ fun CoachAppApp(viewModel: CoachViewModel = viewModel()) {
                                 currentDestination = AppDestinations.SESSION_RECAP
                             }
                         )
-                        AppDestinations.TEAM_HUB -> TeamHubScreen(
-                            modifier = modifier,
-                            seasonConfig = viewModel.seasonConfig,
-                            onUpdateConfig = { viewModel.updateSeasonConfig(it) },
-                            onUpdatePlayer = { viewModel.updatePlayer(it) },
-                            onDeletePlayer = { viewModel.deletePlayer(it) },
-                            onAddAssessment = { id, assessment -> viewModel.addPlayerAssessment(id, assessment) }
-                        )
+                        AppDestinations.TEAM_HUB -> {
+                            TeamHubScreen(
+                                modifier = modifier,
+                                viewModel = presidentViewModel,
+                                seasonConfig = viewModel.seasonConfig,
+                                onUpdateConfig = { viewModel.updateSeasonConfig(it) }
+                            )
+                        }
                         AppDestinations.COACH_SPACE -> CoachSpaceScreen(
                             modifier = modifier,
                             viewModel = viewModel,
@@ -225,7 +251,10 @@ fun CoachAppApp(viewModel: CoachViewModel = viewModel()) {
                                             viewModel.currentAssessmentType = com.example.coachapp.data.AssessmentType.FLASH
                                             currentDestination = AppDestinations.DIAGNOSTIC 
                                         },
-                                        onBack = { currentDestination = AppDestinations.DASHBOARD }
+                                        onBack = { currentDestination = AppDestinations.DASHBOARD },
+                                        onPushSession = { 
+                                            presidentViewModel.pushSession(it, onSuccess = {}, onError = {})
+                                        }
                                     )
                                 }
                                 else -> { 
@@ -248,7 +277,11 @@ fun CoachAppApp(viewModel: CoachViewModel = viewModel()) {
                             modifier = modifier,
                             seasonConfig = viewModel.seasonConfig,
                             initialSessionId = viewModel.selectedSessionIdForBuilder,
-                            onUpdateSession = { viewModel.updateSeasonConfig(viewModel.seasonConfig.copy(plannedTrainings = viewModel.seasonConfig.plannedTrainings.map { s -> if (s.id == it.id) it else s })) }
+                            onUpdateSession = { viewModel.updateSeasonConfig(viewModel.seasonConfig.copy(plannedTrainings = viewModel.seasonConfig.plannedTrainings.map { s -> if (s.id == it.id) it else s })) },
+                            onPushSession = {
+                                presidentViewModel.pushSession(it, onSuccess = {}, onError = {})
+                            },
+                            onBack = { currentDestination = AppDestinations.SEASON_CALENDAR }
                         )
                         AppDestinations.INSIGHTS -> InsightsScreen(
                             modifier = modifier,
@@ -268,10 +301,25 @@ fun CoachAppApp(viewModel: CoachViewModel = viewModel()) {
                             seasonConfig = viewModel.seasonConfig,
                             userRole = viewModel.userRole,
                             isCoachCde = viewModel.isCoachCde,
-                            cdeCategorie = viewModel.cdeCategorie,
-                            cdeRole = viewModel.cdeRole,
+                            cdeAssignments = viewModel.cdeAssignments,
+                            vivierPrincipal = viewModel.vivierPrincipal,    // ← ajoute
+                            vivierInferieur = viewModel.vivierInferieur,
+                            slotsPersistes = viewModel.slotsPersistes,          // ← nouveau
+                            bancPersiste = viewModel.bancPersiste,               // ← nouveau
+                            onOuverture = { categorie ->                         // ← nouveau
+                                val quota = com.example.coachapp.ui.screens.quotaParCategorie(categorie)
+                                viewModel.creerOuChargerConvocation(categorie, quota)
+                            },
+                            onSlotChange = { index, type, joueur ->
+                                viewModel.sauvegarderSlot(index, type, joueur)
+                            },
+                            onSauvegarder = { principal, banc ->
+                                viewModel.sauvegarderSelection(principal, banc)
+                                viewModel.finaliserConvocation()
+                            },
                             onUpdateConfig = { viewModel.updateSeasonConfig(it) },
                             onLogout = { viewModel.logout() },
+                            onNavigateToPresident = { currentDestination = AppDestinations.PRESIDENT_DASHBOARD },
                             onNavigateToGlobalAssessment = {
                                 viewModel.currentAssessmentType = com.example.coachapp.data.AssessmentType.GLOBAL
                                 currentDestination = AppDestinations.DIAGNOSTIC
@@ -293,6 +341,18 @@ fun CoachAppApp(viewModel: CoachViewModel = viewModel()) {
                             } else {
                                 currentDestination = AppDestinations.SEASON_CALENDAR
                             }
+                        }
+                        AppDestinations.PRESIDENT_DASHBOARD -> {
+                            PresidentDashboardScreen(
+                                viewModel = presidentViewModel,
+                                onBack = { currentDestination = AppDestinations.PROFILE }
+                            )
+                        }
+                        AppDestinations.COPLAYER_PLANNING -> {
+                            CoPlayerPlanningScreen(
+                                viewModel = playerViewModel,
+                                modifier = modifier
+                            )
                         }
                     }
                 }
@@ -317,4 +377,6 @@ enum class AppDestinations(
     DIAGNOSTIC("Diagnostic", R.drawable.ic_favorite),
     PROFILE("Profil", R.drawable.ic_home),
     SESSION_RECAP("Bilan", R.drawable.ic_home),
+    PRESIDENT_DASHBOARD("Gestion Club", R.drawable.ic_home),
+    COPLAYER_PLANNING("Mon Planning", R.drawable.ic_home),
 }

@@ -90,7 +90,8 @@ object CalendrierParser {
                                             startTime = startTime,
                                             type = competitionType,
                                             opponent = "À définir",
-                                            location = lieu ?: "À définir"
+                                            location = lieu ?: "À définir",
+                                            attendance = emptyMap()
                                         )
                                     )
                                 }
