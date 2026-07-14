@@ -38,6 +38,7 @@ import androidx.compose.ui.unit.sp
 import com.example.coachapp.data.*
 import com.example.coachapp.ui.screens.SeasonCycle
 import java.time.LocalDate
+import java.util.UUID
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
 import java.time.format.TextStyle
@@ -716,19 +717,37 @@ fun TrainingSessionCard(
             seasonConfig = seasonConfig,
             allPlayers = allPlayers,
             onDismiss = { showEditSession = false },
-            onConfirm = { updated: TrainingSession ->
+            onConfirm = { updated: TrainingSession, onResult ->
+                var sessionToSave = updated
+                
+                // Correction UUID : Si c'est un template, on génère un vrai UUID pour Supabase
+                if (sessionToSave.id.startsWith("template_")) {
+                    sessionToSave = sessionToSave.copy(id = java.util.UUID.randomUUID().toString())
+                }
+
                 val config = persistenceManager.loadSeasonConfig()
-                val newList = if (!config.plannedTrainings.any { it.id == session.id }) config.plannedTrainings + updated 
-                              else config.plannedTrainings.map { if (it.id == session.id) updated else it }
+                // On met à jour ou on ajoute la séance (si l'ID a changé, il faut être vigilant)
+                val newList = if (!config.plannedTrainings.any { it.id == sessionToSave.id }) {
+                    config.plannedTrainings + sessionToSave
+                } else {
+                    config.plannedTrainings.map { if (it.id == sessionToSave.id) sessionToSave else it }
+                }
                 
                 val updatedConfig = config.copy(plannedTrainings = newList)
                 persistenceManager.saveSeasonConfig(updatedConfig)
                 
-                // AJOUT : Pousser vers Supabase pour que le joueur reçoive la convocation
-                presidentViewModel.pushSession(updated, onSuccess = {}, onError = {})
-
-                showEditSession = false
-                onUpdate()
+                // Synchronisation vers Supabase avec l'ID propre
+                presidentViewModel.pushSession(
+                    session = sessionToSave,
+                    onSuccess = { 
+                        onResult(true)
+                        onUpdate()
+                    },
+                    onError = { error ->
+                        android.util.Log.e("EDIT_SESSION", "Erreur push: $error")
+                        onResult(false)
+                    }
+                )
             }
         )
     }
@@ -957,11 +976,12 @@ fun ColorPickerDialog(teamName: String, onColorSelected: (Color) -> Unit, onDism
 fun EditSessionDialog(
     session: TrainingSession,
     seasonConfig: SeasonConfig,
-    allPlayers: List<Player>, // Ajouté
+    allPlayers: List<Player>,
     onDismiss: () -> Unit,
-    onConfirm: (TrainingSession) -> Unit
+    onConfirm: (TrainingSession, onResult: (Boolean) -> Unit) -> Unit
 ) {
     var focus by remember { mutableStateOf(session.focusArea ?: "") }
+    var coachNote by remember { mutableStateOf(session.coachNotes ?: "") }
     val focusOptions = listOf("Service / Réception", "Attaque / Bloc", "Défense / Relance", "Systèmes de jeu", "Physique")
     
     // État local des présences : Map<ID_Joueur, Statut>
@@ -1004,6 +1024,22 @@ fun EditSessionDialog(
                     label = { Text("Autre thème...") },
                     modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
                 )
+
+                OutlinedTextField(
+                    value = coachNote,
+                    onValueChange = { if (it.length <= 130) coachNote = it },
+                    label = { Text("Note aux joueurs (max 130 car.)") },
+                    placeholder = { Text("Ex: Prévoir gourde, retard possible...") },
+                    modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
+                    supportingText = {
+                        Text(
+                            text = "${coachNote.length} / 130",
+                            modifier = Modifier.fillMaxWidth(),
+                            textAlign = TextAlign.End,
+                            style = MaterialTheme.typography.labelSmall
+                        )
+                    }
+                )
                 
                 Spacer(modifier = Modifier.height(24.dp))
                 
@@ -1033,9 +1069,18 @@ fun EditSessionDialog(
             Button(
                 onClick = { 
                     isSaving = true
-                    onConfirm(session.copy(focusArea = focus, attendance = tempAttendance.toMap())) 
-                    saveSuccess = true
-                    isSaving = false
+                    val updatedSession = session.copy(
+                        focusArea = focus, 
+                        attendance = tempAttendance.toMap(),
+                        coachNotes = coachNote,
+                        isValidated = true // On valide lors de cette action
+                    )
+                    onConfirm(updatedSession) { success ->
+                        isSaving = false
+                        if (success) {
+                            saveSuccess = true
+                        }
+                    }
                 },
                 shape = RoundedCornerShape(8.dp),
                 colors = ButtonDefaults.buttonColors(

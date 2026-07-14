@@ -519,6 +519,8 @@ class PresidentRepository(
             val dataTechnique = buildJsonObject {
                 put("id", session.id)
                 put("collectif_id", session.teamId)
+                put("date_seance", session.date.toString())
+                put("saison", saison)
                 put("warmup", session.warmup)
                 put("drills", session.drills)
                 put("situations", session.smallGroupSituations)
@@ -528,19 +530,18 @@ class PresidentRepository(
             supabase.from("collectif_seances").upsert(dataTechnique)
 
             // 2. On pousse la séance publique (Visible par les joueurs)
+            // Alignement avec la table 'seance' : id, collectif_id, coach_id, titre, date_heure, duree_minutes, lieu, type, statut, note_coach
             val dataPublique = buildJsonObject {
                 put("id", session.id)
                 put("collectif_id", session.teamId)
-                put("club_id", clubId)
-                put("date_seance", session.date.toString())
-                put("heure_debut", session.startTime.toString())
+                put("coach_id", userId)
+                put("titre", session.focusArea ?: "Séance sans thème")
+                put("date_heure", "${session.date}T${session.startTime}")
                 put("duree_minutes", session.durationMinutes)
-                put("terrain", session.terrain)
-                put("focus_area", session.focusArea)
-                put("note_coach", session.coachNotes)
-                put("is_validated", session.isValidated)
-                put("saison", saison)
-                put("created_by", userId)
+                put("lieu", session.terrain ?: "Terrain 1")
+                put("type", "entrainement")
+                put("statut", "planifie")
+                put("note_coach", session.coachNotes ?: "")
             }
             supabase.from("seance").upsert(dataPublique)
 

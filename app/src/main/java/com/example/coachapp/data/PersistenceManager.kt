@@ -139,6 +139,90 @@ class PersistenceManager(context: Context) {
         return list
     }
 
+    fun saveSchedules(schedules: List<TrainingSchedule>) {
+        val arr = JSONArray()
+        schedules.forEach { s ->
+            val obj = JSONObject()
+            obj.put("id", s.id ?: "")
+            obj.put("teamId", s.teamId)
+            obj.put("clubId", s.clubId ?: "")
+            obj.put("day", s.dayOfWeek.name)
+            obj.put("time", s.startTime.toString())
+            obj.put("duration", s.durationMinutes)
+            obj.put("terrain", s.terrain ?: "Terrain 1")
+            arr.put(obj)
+        }
+        prefs.edit().putString("s_schedules", arr.toString()).apply()
+    }
+
+    fun loadSchedules(): List<TrainingSchedule> {
+        val str = prefs.getString("s_schedules", "[]") ?: "[]"
+        val list = mutableListOf<TrainingSchedule>()
+        val arr = JSONArray(str)
+        for (i in 0 until arr.length()) {
+            val obj = arr.getJSONObject(i)
+            list.add(TrainingSchedule(
+                id = obj.optString("id").takeIf { it.isNotEmpty() },
+                teamId = obj.getString("teamId"),
+                clubId = obj.optString("clubId").takeIf { it.isNotEmpty() },
+                dayOfWeek = java.time.DayOfWeek.valueOf(obj.getString("day")),
+                startTime = LocalTime.parse(obj.getString("time")),
+                durationMinutes = obj.getInt("duration"),
+                terrain = obj.optString("terrain", "Terrain 1")
+            ))
+        }
+        return list
+    }
+
+    fun saveCompetitions(comps: List<CompetitionEvent>) {
+        val arr = JSONArray()
+        comps.forEach { c ->
+            val obj = JSONObject()
+            obj.put("id", c.id)
+            obj.put("teamId", c.teamId)
+            obj.put("clubId", c.clubId ?: "")
+            obj.put("date", c.date.toString())
+            obj.put("time", c.startTime.toString())
+            obj.put("type", c.type.name)
+            obj.put("opponent", c.opponent)
+            obj.put("location", c.location)
+            
+            val attObj = JSONObject()
+            c.attendance.forEach { (k, v) -> attObj.put(k, v) }
+            obj.put("attendance", attObj)
+            
+            obj.put("saison", c.saison)
+            arr.put(obj)
+        }
+        prefs.edit().putString("s_competitions", arr.toString()).apply()
+    }
+
+    fun loadCompetitions(): List<CompetitionEvent> {
+        val str = prefs.getString("s_competitions", "[]") ?: "[]"
+        val list = mutableListOf<CompetitionEvent>()
+        val arr = JSONArray(str)
+        for (i in 0 until arr.length()) {
+            val obj = arr.getJSONObject(i)
+            val att = mutableMapOf<String, String>()
+            val attJson = obj.optJSONObject("attendance")
+            attJson?.keys()?.forEach { key -> att[key] = attJson.getString(key) }
+
+            list.add(CompetitionEvent(
+                id = obj.getString("id"),
+                teamId = obj.getString("teamId"),
+                clubId = obj.optString("clubId").takeIf { it.isNotEmpty() },
+                date = LocalDate.parse(obj.getString("date")),
+                startTime = LocalTime.parse(obj.getString("time")),
+                type = CompetitionType.valueOf(obj.getString("type")),
+                opponent = obj.getString("opponent"),
+                location = obj.getString("location"),
+                attendance = att,
+                saison = obj.optString("saison", "2026-2027")
+            ))
+        }
+        return list
+    }
+
     // --- SERVICE 3 : SAISON (Planning & Sessions) ---
     fun saveSessions(sessions: List<TrainingSession>) {
         val arr = JSONArray()
@@ -268,6 +352,8 @@ class PersistenceManager(context: Context) {
         saveTeams(config.teams)
         savePlayers(config.players)
         saveSessions(config.plannedTrainings)
+        saveSchedules(config.trainingSchedules)
+        saveCompetitions(config.competitions)
         prefs.edit().putBoolean("sys_onboarding", config.isOnboardingCompleted).apply()
     }
 
@@ -276,7 +362,9 @@ class PersistenceManager(context: Context) {
             coachProfile = loadProfile(),
             teams = loadTeams(),
             players = loadPlayers(),
+            trainingSchedules = loadSchedules(),
             plannedTrainings = loadSessions(),
+            competitions = loadCompetitions(),
             isOnboardingCompleted = prefs.getBoolean("sys_onboarding", false)
         )
     }

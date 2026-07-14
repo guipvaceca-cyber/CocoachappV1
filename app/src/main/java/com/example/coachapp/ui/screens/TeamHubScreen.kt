@@ -28,6 +28,7 @@ import com.example.coachapp.ui.president.PresidentUiState
 import kotlinx.coroutines.launch
 import java.time.DayOfWeek
 import java.time.LocalTime
+import java.util.Locale
 import java.time.format.TextStyle
 import java.util.*
 
@@ -103,7 +104,8 @@ fun TeamHubScreen(
                         } else {
                             LazyColumn(verticalArrangement = Arrangement.spacedBy(16.dp)) {
                                 items(mesCollectifs) { detail ->
-                                    val schedules = seasonConfig.trainingSchedules.filter { it.teamId == detail.collectif.id }
+                                    // On utilise le clubPlanning synchronisé avec Supabase pour l'affichage
+                                    val schedules = clubPlanning.filter { it.teamId == detail.collectif.id }
                                     
                                     // Calcul couleur état (Rouge, Orange, Vert, Bleu)
                                     val count = detail.joueurs.size
@@ -133,7 +135,7 @@ fun TeamHubScreen(
                                                         shape = RoundedCornerShape(4.dp)
                                                     ) {
                                                         Text(
-                                                            "${s.dayOfWeek.getDisplayName(TextStyle.SHORT, Locale.FRENCH)} ${s.startTime}",
+                                                            "${s.dayOfWeek.getDisplayName(java.time.format.TextStyle.SHORT, Locale.FRENCH)} ${s.startTime}",
                                                             fontSize = 10.sp,
                                                             modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
                                                         )
