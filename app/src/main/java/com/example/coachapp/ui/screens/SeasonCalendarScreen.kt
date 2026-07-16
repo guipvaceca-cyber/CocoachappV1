@@ -122,7 +122,8 @@ fun SeasonCalendarScreen(
                         firstName = j.prenom, 
                         lastName = j.nom, 
                         number = 0, 
-                        position = j.poste ?: ""
+                        position = j.poste ?: "",
+                        vivierId = j.vivierJoueurId
                     )
                 }
         } else emptyList()
@@ -344,19 +345,39 @@ fun SeasonCalendarScreen(
             initialTeamId = selectedTeamId ?: coachTeams.firstOrNull()?.id ?: "",
             teamColors = coachTeamColors,
             onDismiss = { showAddEvent = false },
-            onConfirm = { event ->
+            onConfirm = { event, onResult ->
                 when (event) {
                     is CalendarListItem.Training -> {
-                        config = config.copy(plannedTrainings = config.plannedTrainings + event.session)
-                        presidentViewModel.pushSession(event.session, onSuccess = {}, onError = {})
+                        val session = event.session
+                        config = config.copy(plannedTrainings = config.plannedTrainings + session)
+                        persistenceManager.saveSeasonConfig(config)
+                        
+                        presidentViewModel.pushSession(
+                            session = session,
+                            onSuccess = { 
+                                onResult(true) 
+                            },
+                            onError = { 
+                                onResult(false) 
+                            }
+                        )
                     }
                     is CalendarListItem.Comp -> {
-                        config = config.copy(competitions = config.competitions + event.event)
-                        presidentViewModel.pushMatch(event.event, onSuccess = {}, onError = {})
+                        val match = event.event
+                        config = config.copy(competitions = config.competitions + match)
+                        persistenceManager.saveSeasonConfig(config)
+                        
+                        presidentViewModel.pushMatch(
+                            event = match,
+                            onSuccess = { 
+                                onResult(true) 
+                            },
+                            onError = { 
+                                onResult(false) 
+                            }
+                        )
                     }
                 }
-                persistenceManager.saveSeasonConfig(config)
-                showAddEvent = false
             }
         )
     }
@@ -680,13 +701,19 @@ fun TrainingSessionCard(
             }
             
             Row(verticalAlignment = Alignment.CenterVertically) {
-                TextButton(onClick = { /* Attendance */ }, contentPadding = PaddingValues(0.dp)) {
-                    Icon(Icons.Default.People, null, modifier = Modifier.size(16.dp))
-                    Spacer(Modifier.width(4.dp))
-                    Text("${session.attendance.size} présents", fontSize = 11.sp)
-                }
+                val presentCount = session.attendance.values.count { it == "present" }
+                val totalCount = session.attendance.size
                 
-                Spacer(Modifier.weight(1f))
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                    Icon(Icons.Default.People, null, modifier = Modifier.size(16.dp), tint = Color.Gray)
+                    Spacer(Modifier.width(4.dp))
+                    Text("$presentCount / $totalCount présents", fontSize = 11.sp)
+                    
+                    // Optionnel : Petit bouton de refresh pour forcer la synchro des réponses
+                    IconButton(onClick = { onUpdate() }, modifier = Modifier.size(24.dp)) {
+                        Icon(Icons.Default.Refresh, null, modifier = Modifier.size(12.dp), tint = Color.Gray)
+                    }
+                }
                 
                 if (!isEvaluated) {
                     Button(
@@ -717,6 +744,7 @@ fun TrainingSessionCard(
             seasonConfig = seasonConfig,
             allPlayers = allPlayers,
             onDismiss = { showEditSession = false },
+            presidentViewModel = presidentViewModel,
             onConfirm = { updated: TrainingSession, onResult ->
                 var sessionToSave = updated
                 
@@ -978,7 +1006,8 @@ fun EditSessionDialog(
     seasonConfig: SeasonConfig,
     allPlayers: List<Player>,
     onDismiss: () -> Unit,
-    onConfirm: (TrainingSession, onResult: (Boolean) -> Unit) -> Unit
+    onConfirm: (TrainingSession, onResult: (Boolean) -> Unit) -> Unit,
+    presidentViewModel: com.example.coachapp.ui.president.PresidentViewModel
 ) {
     var focus by remember { mutableStateOf(session.focusArea ?: "") }
     var coachNote by remember { mutableStateOf(session.coachNotes ?: "") }
@@ -989,6 +1018,18 @@ fun EditSessionDialog(
         mutableStateMapOf<String, String>().apply { 
             putAll(session.attendance) 
         } 
+    }
+
+    // Synchronisation automatique des réponses joueurs à l'ouverture
+    LaunchedEffect(session.id) {
+        presidentViewModel.syncPresencesForSession(session.id) { remoteMap ->
+            remoteMap.forEach { (vivierId, status) ->
+                val localPlayer = allPlayers.find { it.vivierId == vivierId }
+                if (localPlayer != null) {
+                    tempAttendance[localPlayer.id] = status
+                }
+            }
+        }
     }
     
     val teamPlayers = remember(session.teamId, allPlayers) {
@@ -1217,7 +1258,7 @@ fun AddEventDialog(
     initialTeamId: String, 
     teamColors: Map<String, Color>, // Pour les cards
     onDismiss: () -> Unit, 
-    onConfirm: (CalendarListItem) -> Unit
+    onConfirm: (CalendarListItem, onResult: (Boolean) -> Unit) -> Unit
 ) {
     var type by remember { mutableStateOf("TRAINING") }
     var selectedTeamId by remember { mutableStateOf(initialTeamId) }
@@ -1228,6 +1269,17 @@ fun AddEventDialog(
     var startHour by remember { mutableStateOf("18") }
     var startMinute by remember { mutableStateOf("30") }
     var endHour by remember { mutableStateOf("20") }
+
+    var isSaving by remember { mutableStateOf(false) }
+    var saveSuccess by remember { mutableStateOf(false) }
+
+    // Fermeture automatique après succès
+    LaunchedEffect(saveSuccess) {
+        if (saveSuccess) {
+            kotlinx.coroutines.delay(1500)
+            onDismiss()
+        }
+    }
 
     val playersOfTeam = remember(selectedTeamId, allPlayers) {
         allPlayers.filter { it.teamId == selectedTeamId }
@@ -1342,27 +1394,65 @@ fun AddEventDialog(
             }
         },
         confirmButton = {
-            Button(onClick = {
-                try {
-                    val sTime = LocalTime.of(startHour.toInt(), startMinute.toInt())
-                    val attendance = selectedPlayerIds.filter { it.value }.mapValues { "pending" }
-                    
-                    if (type == "TRAINING") {
-                        onConfirm(CalendarListItem.Training(TrainingSession(
-                            id = UUID.randomUUID().toString(), teamId = selectedTeamId, date = selectedDate, 
-                            startTime = sTime, durationMinutes = 90, focusArea = focus, attendance = attendance
-                        )))
-                    } else {
-                        onConfirm(CalendarListItem.Comp(CompetitionEvent(
-                            id = UUID.randomUUID().toString(), teamId = selectedTeamId, date = selectedDate, 
-                            startTime = sTime, type = CompetitionType.CHAMPIONSHIP, opponent = opponent, 
-                            location = "Gymnase", attendance = attendance
-                        )))
+            Button(
+                onClick = {
+                    try {
+                        isSaving = true
+                        val sTime = LocalTime.of(startHour.toInt(), startMinute.toInt())
+                        val attendance = selectedPlayerIds.filter { it.value }.mapValues { "pending" }
+                        
+                        val item = if (type == "TRAINING") {
+                            CalendarListItem.Training(TrainingSession(
+                                id = java.util.UUID.randomUUID().toString(), 
+                                teamId = selectedTeamId, 
+                                date = selectedDate, 
+                                startTime = sTime, 
+                                durationMinutes = 90, 
+                                focusArea = focus, 
+                                attendance = attendance,
+                                isValidated = true // On valide directement lors de l'ajout
+                            ))
+                        } else {
+                            CalendarListItem.Comp(CompetitionEvent(
+                                id = java.util.UUID.randomUUID().toString(), 
+                                teamId = selectedTeamId, 
+                                date = selectedDate, 
+                                startTime = sTime, 
+                                type = CompetitionType.CHAMPIONSHIP, 
+                                opponent = opponent, 
+                                location = "Gymnase", 
+                                attendance = attendance
+                            ))
+                        }
+
+                        onConfirm(item) { success ->
+                            isSaving = false
+                            if (success) {
+                                saveSuccess = true
+                            }
+                        }
+                    } catch (_: Exception) {
+                        isSaving = false
                     }
-                } catch (_: Exception) {}
-            }) { Text("Enregistrer et Convoquer") }
+                },
+                shape = RoundedCornerShape(8.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = if (saveSuccess) Color(0xFF4CAF50) else MaterialTheme.colorScheme.primary
+                ),
+                enabled = !isSaving && !saveSuccess
+            ) { 
+                if (isSaving) {
+                    CircularProgressIndicator(modifier = Modifier.size(16.dp), color = Color.White, strokeWidth = 2.dp)
+                } else {
+                    Icon(if (saveSuccess) Icons.Default.Check else Icons.Default.Send, null, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text(if (saveSuccess) "Convocation Envoyée !" else "Enregistrer et Convoquer") 
+                }
+            }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Annuler") } }
+        dismissButton = { 
+            TextButton(onClick = onDismiss, enabled = !isSaving) { Text("Annuler") }
+        }
     )
 }
 

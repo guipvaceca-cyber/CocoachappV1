@@ -107,6 +107,7 @@ class PersistenceManager(context: Context) {
             pObj.put("tech", p.techScore)
             pObj.put("tact", p.tactScore)
             pObj.put("phys", p.physicalScore)
+            if (p.vivierId != null) pObj.put("vivierId", p.vivierId)
             arr.put(pObj)
         }
         prefs.edit().putString("c_players", arr.toString()).apply()
@@ -133,7 +134,8 @@ class PersistenceManager(context: Context) {
                 notes = pObj.optString("notes"),
                 techScore = pObj.optInt("tech"),
                 tactScore = pObj.optInt("tact"),
-                physicalScore = pObj.optInt("phys")
+                physicalScore = pObj.optInt("phys"),
+                vivierId = if (pObj.has("vivierId")) pObj.getLong("vivierId") else null
             ))
         }
         return list

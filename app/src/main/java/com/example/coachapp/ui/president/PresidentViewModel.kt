@@ -342,6 +342,21 @@ class PresidentViewModel(
         }
     }
 
+    fun supprimerPlanning(
+        scheduleId: String,
+        onSuccess: () -> Unit,
+        onError: (String) -> Unit
+    ) {
+        viewModelScope.launch {
+            repository.supprimerPlanning(scheduleId)
+                .onSuccess { 
+                    chargerCollectifs()
+                    onSuccess() 
+                }
+                .onFailure { onError(it.message ?: "Erreur suppression") }
+        }
+    }
+
     fun pushSession(
         session: com.example.coachapp.data.TrainingSession,
         onSuccess: () -> Unit,
@@ -377,6 +392,13 @@ class PresidentViewModel(
             repository.refuserEffectif(collectifId)
                 .onSuccess { chargerCollectifs(); onSuccess() }
                 .onFailure { onError(it.message ?: "Erreur refus") }
+        }
+    }
+
+    fun syncPresencesForSession(sessionId: String, onResult: (Map<Long, String>) -> Unit) {
+        viewModelScope.launch {
+            val presences = repository.fetchSessionPresences(sessionId)
+            onResult(presences)
         }
     }
 }

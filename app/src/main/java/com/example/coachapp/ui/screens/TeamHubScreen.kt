@@ -176,19 +176,41 @@ fun TeamHubScreen(
             clubPlanning = clubPlanning,
             onDismiss = { selectedCollectifForSchedule = null },
             onConfirm = { newSchedules ->
-                // 1. Mise à jour Supabase
-                newSchedules.forEach { s ->
+                val teamId = selectedCollectifForSchedule!!.id
+                
+                // 1. Gérer les suppressions (Jours décochés)
+                val newDays = newSchedules.map { it.dayOfWeek }.toSet()
+                val schedulesToDelete = currentSchedules.filter { it.dayOfWeek !in newDays }
+                
+                schedulesToDelete.forEach { s ->
+                    s.id?.let { id ->
+                        viewModel.supprimerPlanning(
+                            scheduleId = id,
+                            onSuccess = {},
+                            onError = { scope.launch { snackbarHostState.showSnackbar("Erreur suppression: $it") } }
+                        )
+                    }
+                }
+
+                // 2. Gérer les ajouts et mises à jour
+                val finalSchedulesToSave = newSchedules.map { ns ->
+                    // On cherche si ce jour existait déjà pour garder l'ID Supabase
+                    val existing = currentSchedules.find { it.dayOfWeek == ns.dayOfWeek }
+                    ns.copy(id = existing?.id, teamId = teamId)
+                }
+
+                finalSchedulesToSave.forEach { s ->
                     viewModel.enregistrerPlanning(
-                        s.copy(teamId = selectedCollectifForSchedule!!.id),
+                        schedule = s,
                         onSuccess = {},
-                        onError = { scope.launch { snackbarHostState.showSnackbar(it) } }
+                        onError = { scope.launch { snackbarHostState.showSnackbar("Erreur sauvegarde: $it") } }
                     )
                 }
 
-                // 2. Mise à jour locale (pour affichage immédiat)
-                val otherTeamsSchedules = seasonConfig.trainingSchedules.filter { it.teamId != selectedCollectifForSchedule!!.id }
-                val schedulesWithId = newSchedules.map { it.copy(teamId = selectedCollectifForSchedule!!.id) }
-                onUpdateConfig(seasonConfig.copy(trainingSchedules = otherTeamsSchedules + schedulesWithId))
+                // 3. Mise à jour locale (Source de vérité pour l'affichage immédiat)
+                val otherTeamsSchedules = seasonConfig.trainingSchedules.filter { it.teamId != teamId }
+                onUpdateConfig(seasonConfig.copy(trainingSchedules = otherTeamsSchedules + finalSchedulesToSave))
+                
                 selectedCollectifForSchedule = null
             }
         )

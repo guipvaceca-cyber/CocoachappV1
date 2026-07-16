@@ -511,6 +511,17 @@ class PresidentRepository(
         }
     }
 
+    suspend fun supprimerPlanning(scheduleId: String): Result<Unit> {
+        return try {
+            supabase.from("collectif_planning").delete {
+                filter { eq("id", scheduleId) }
+            }
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
     suspend fun pushSession(session: TrainingSession, clubId: String, saison: String): Result<Unit> {
         return try {
             val userId = supabase.auth.currentUserOrNull()?.id ?: ""
@@ -556,6 +567,25 @@ class PresidentRepository(
         }
     }
 
+    suspend fun fetchSessionPresences(sessionId: String): Map<Long, String> {
+        return try {
+            val response = supabase.from("coplayer_presence")
+                .select(Columns.raw("status, player_id, coplayer_profil(vivier_id)")) {
+                    filter { eq("session_id", sessionId) }
+                }
+            val rows = json.decodeFromString<List<JsonObject>>(response.data)
+            rows.associate { row ->
+                val status = row.getStr("status")?.lowercase() ?: "pending"
+                val profile = row["coplayer_profil"] as? JsonObject
+                val vivierId = profile?.get("vivier_id")?.jsonPrimitive?.longOrNull ?: -1L
+                vivierId to status
+            }.filterKeys { it != -1L }
+        } catch (e: Exception) {
+            android.util.Log.e("PRESIDENT_REPO", "Erreur fetchSessionPresences", e)
+            emptyMap()
+        }
+    }
+
     private suspend fun convoquerJoueurs(sessionId: String, collectifId: String) {
         try {
             val joueurs = getJoueursCollectif(collectifId)
@@ -577,7 +607,8 @@ class PresidentRepository(
             }
             
             if (presences.isNotEmpty()) {
-                supabase.from("coplayer_presence").upsert(presences)
+                // ignoreDuplicates = true permet de NE PAS écraser les réponses (Présent/Absent) déjà faites par les joueurs
+                supabase.from("coplayer_presence").upsert(presences, ignoreDuplicates = true)
             }
         } catch (e: Exception) {
             android.util.Log.e("PRESIDENT_REPO", "Erreur convocation automatique", e)

@@ -31,7 +31,8 @@ data class Player(
     // Current scores (most recent assessment or initial)
     val techScore: Int = 0,
     val tactScore: Int = 0,
-    val physicalScore: Int = 0
+    val physicalScore: Int = 0,
+    val vivierId: Long? = null // Link to Supabase vivier for sync
 ) {
     val fullName: String get() = "$firstName $lastName"
 }
