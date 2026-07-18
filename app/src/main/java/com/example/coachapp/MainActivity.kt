@@ -1,5 +1,6 @@
 package com.example.coachapp
 
+import androidx.activity.SystemBarStyle
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
@@ -11,9 +12,13 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.PriorityHigh
 import androidx.compose.material3.*
+import androidx.compose.material3.adaptive.currentWindowAdaptiveInfo
+import androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteDefaults
 import androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteScaffold
+import androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteScaffoldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -23,7 +28,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.coachapp.data.PersistenceManager
+import com.example.coachapp.data.*
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.coachapp.ui.CoachViewModel
 import com.example.coachapp.ui.screens.*
@@ -33,7 +38,9 @@ import java.time.LocalDate
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        enableEdgeToEdge()
+        enableEdgeToEdge(
+            statusBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT)
+        )
         setContent {
             CoachAppTheme {
                 CoachAppApp()
@@ -55,9 +62,13 @@ fun CoachAppApp(viewModel: CoachViewModel = viewModel()) {
             com.example.coachapp.data.repository.PresidentRepository(com.example.coachapp.data.SupabaseManager.client)
         )
     )
+    val trainingViewModel: com.example.coachapp.ui.training.TrainingViewModel = viewModel(
+        factory = com.example.coachapp.ui.training.TrainingViewModelFactory(
+            com.example.coachapp.data.repository.TrainingRepository(com.example.coachapp.data.SupabaseManager.client)
+        )
+    )
 
     var currentDestination by rememberSaveable { mutableStateOf(AppDestinations.DASHBOARD) }
-    var isLaunchingTerrain by remember { mutableStateOf(false) }
 
     if (!viewModel.isLoggedIn) {
         LoginScreen(
@@ -80,20 +91,110 @@ fun CoachAppApp(viewModel: CoachViewModel = viewModel()) {
         OnboardingScreen(
             initialConfig = viewModel.seasonConfig,
             pendingInvitations = viewModel.pendingInvitations,
-            onCompleted = { config ->
+            onCompleted = { config, intentions ->
+                intentions.forEach { viewModel.preRegisterFormation(it) }
                 viewModel.completeOnboarding(config)
             }
         )
-    } else if (isLaunchingTerrain) {
-        TerrainLaunchScreen(onAnimationFinish = { isLaunchingTerrain = false })
     } else {
+        val navSuiteColors = NavigationSuiteDefaults.colors(
+            navigationBarContainerColor = Color(0xFF001529),
+            navigationBarContentColor = Color.White,
+            navigationRailContainerColor = Color(0xFF001529),
+            navigationRailContentColor = Color.White
+        )
+
+        val itemColors = NavigationSuiteDefaults.itemColors(
+            navigationBarItemColors = NavigationBarItemDefaults.colors(
+                selectedIconColor = Color(0xFF00B4D8),
+                selectedTextColor = Color(0xFF00B4D8),
+                unselectedIconColor = Color.White.copy(alpha = 0.6f),
+                unselectedTextColor = Color.White.copy(alpha = 0.6f),
+                indicatorColor = Color.Transparent
+            ),
+            navigationRailItemColors = NavigationRailItemDefaults.colors(
+                selectedIconColor = Color(0xFF00B4D8),
+                selectedTextColor = Color(0xFF00B4D8),
+                unselectedIconColor = Color.White.copy(alpha = 0.6f),
+                unselectedTextColor = Color.White.copy(alpha = 0.6f),
+                indicatorColor = Color.Transparent
+            )
+        )
+
+        // Merge local teams and official club teams for consistent UI (colors, names)
+        val presidentState by presidentViewModel.uiState.collectAsState()
+        
+        val allTeams = remember(viewModel.seasonConfig.teams, presidentState) {
+            val localTeams = viewModel.seasonConfig.teams
+            val customColors = persistenceManager.loadTeamColors() // Refresh on every state change
+            val clubTeams = if (presidentState is com.example.coachapp.ui.president.PresidentUiState.Success) {
+                val userId = com.example.coachapp.data.SupabaseManager.auth.currentUserOrNull()?.id
+                (presidentState as com.example.coachapp.ui.president.PresidentUiState.Success).collectifs
+                    .filter { detail -> detail.rattachements.any { it.coachId == userId } }
+                    .map { detail ->
+                        val teamId = detail.collectif.id
+                        val colorInt = customColors[teamId]
+                        com.example.coachapp.data.Team(
+                            id = teamId,
+                            name = detail.collectif.nom,
+                            color = if (colorInt != null) Color(colorInt) else Color(0xFF2196F3),
+                            format = when(detail.collectif.format) {
+                                "2x2" -> com.example.coachapp.data.TeamFormat.TWO_TWO
+                                "3x3" -> com.example.coachapp.data.TeamFormat.THREE_THREE
+                                "4x4" -> com.example.coachapp.data.TeamFormat.FOUR_FOUR
+                                else -> com.example.coachapp.data.TeamFormat.SIX_SIX
+                            }
+                        )
+                    }
+            } else emptyList()
+            
+            // Merge: prioritizes club teams if IDs overlap, then adds local ones
+            val merged = (clubTeams + localTeams).distinctBy { it.id }
+            merged
+        }
+
+        val allPlayers = remember(viewModel.seasonConfig.players, presidentState) {
+            val localPlayers = viewModel.seasonConfig.players
+            val clubPlayers = if (presidentState is com.example.coachapp.ui.president.PresidentUiState.Success) {
+                (presidentState as com.example.coachapp.ui.president.PresidentUiState.Success).collectifs.flatMap { detail ->
+                    detail.joueurs.map { j ->
+                        com.example.coachapp.data.Player(
+                            id = j.id,
+                            teamId = detail.collectif.id,
+                            firstName = j.prenom,
+                            lastName = j.nom,
+                            number = 0,
+                            position = j.poste ?: "",
+                            vivierId = j.vivierJoueurId
+                        )
+                    }
+                }
+            } else emptyList()
+            
+            (clubPlayers + localPlayers).distinctBy { it.id }
+        }
+
+        val clubEventsState by presidentViewModel.clubEvents.collectAsState()
+
+        val mergedSeasonConfig = remember(viewModel.seasonConfig, allTeams, allPlayers, clubEventsState) {
+            viewModel.seasonConfig.copy(
+                teams = allTeams, 
+                players = allPlayers,
+                clubEvents = clubEventsState
+            )
+        }
+
         NavigationSuiteScaffold(
+            layoutType = NavigationSuiteScaffoldDefaults.calculateFromAdaptiveInfo(currentWindowAdaptiveInfo()),
+            containerColor = Color(0xFF001529), // Match background
+            navigationSuiteColors = navSuiteColors,
             navigationSuiteItems = {
                 // Main Home Item
                 item(
                     icon = { Icon(painterResource(R.drawable.ic_home), contentDescription = "Accueil") },
                     label = { Text("Accueil") },
                     selected = currentDestination == AppDestinations.DASHBOARD && viewModel.selectedResource == null,
+                    colors = itemColors,
                     onClick = {
                         currentDestination = AppDestinations.DASHBOARD
                         viewModel.clearSelectedResource()
@@ -113,12 +214,16 @@ fun CoachAppApp(viewModel: CoachViewModel = viewModel()) {
                         },
                         label = { Text("SOS LABO", color = MaterialTheme.colorScheme.error) },
                         selected = false,
+                        colors = itemColors,
                         onClick = { currentDestination = AppDestinations.COACH_SPACE }
                     )
                 }
             }
         ) {
-            Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
+            Scaffold(
+                modifier = Modifier.fillMaxSize(),
+                containerColor = Color(0xFF001529)
+            ) { innerPadding ->
                 val modifier = Modifier.padding(innerPadding)
                 
                 if (viewModel.selectedResource != null) {
@@ -158,51 +263,52 @@ fun CoachAppApp(viewModel: CoachViewModel = viewModel()) {
                         label = "ScreenTransition"
                     ) { targetDestination ->
                         when (targetDestination) {
-                            AppDestinations.DASHBOARD -> DashboardScreen(
-                            modifier = modifier,
-                            flashResults = viewModel.flashResults,
-                            globalResults = viewModel.globalResults,
-                            seasonConfig = viewModel.seasonConfig,
-                            onNavigate = { dest ->
-                                when(dest) {
-                                    "CALENDAR" -> currentDestination = AppDestinations.SEASON_CALENDAR
-                                    "TEAM_HUB" -> currentDestination = AppDestinations.TEAM_HUB
-                                    "COACH_SPACE" -> currentDestination = AppDestinations.COACH_SPACE
-                                    "COMPANION" -> {
-                                        isLaunchingTerrain = true
-                                        currentDestination = AppDestinations.SESSION_COMPANION
+                            AppDestinations.DASHBOARD -> {
+                                DashboardScreen(
+                                    modifier = modifier,
+                                    flashResults = viewModel.flashResults,
+                                    globalResults = viewModel.globalResults,
+                                    seasonConfig = mergedSeasonConfig,
+                                    onUpdateAttendance = { id, status -> viewModel.updateClubEventAttendance(id, status) },
+                                    onNavigate = { dest ->
+                                        when(dest) {
+                                            "CALENDAR" -> currentDestination = AppDestinations.SEASON_CALENDAR
+                                            "TEAM_HUB" -> currentDestination = AppDestinations.TEAM_HUB
+                                            "COACH_SPACE" -> currentDestination = AppDestinations.COACH_SPACE
+                                            "COMPANION" -> {
+                                                currentDestination = AppDestinations.SESSION_COMPANION
+                                            }
+                                            "MATCH" -> {
+                                                currentDestination = AppDestinations.MATCH_BOARD
+                                            }
+                                            "INSIGHTS" -> currentDestination = AppDestinations.INSIGHTS
+                                            "PROFILE" -> currentDestination = AppDestinations.PROFILE
+                                            "COPLAYER_PLANNING" -> currentDestination = AppDestinations.COPLAYER_PLANNING
+                                            "DIAGNOSTIC_FLASH" -> {
+                                                viewModel.currentAssessmentType = com.example.coachapp.data.AssessmentType.FLASH
+                                                currentDestination = AppDestinations.DIAGNOSTIC
+                                            }
+                                            "PREPARER" -> {
+                                                viewModel.selectedSessionIdForBuilder = null
+                                                currentDestination = AppDestinations.SESSION_BUILDER
+                                            }
+                                            else -> if (dest.startsWith("COMPANION_")) {
+                                                viewModel.selectedSessionIdForBuilder = dest.removePrefix("COMPANION_")
+                                                currentDestination = AppDestinations.SESSION_COMPANION
+                                            }
+                                        }
                                     }
-                                    "MATCH" -> {
-                                        isLaunchingTerrain = true
-                                        currentDestination = AppDestinations.MATCH_BOARD
-                                    }
-                                    "INSIGHTS" -> currentDestination = AppDestinations.INSIGHTS
-                                    "PROFILE" -> currentDestination = AppDestinations.PROFILE
-                                    "COPLAYER_PLANNING" -> currentDestination = AppDestinations.COPLAYER_PLANNING
-                                    "DIAGNOSTIC_FLASH" -> {
-                                        viewModel.currentAssessmentType = com.example.coachapp.data.AssessmentType.FLASH
-                                        currentDestination = AppDestinations.DIAGNOSTIC
-                                    }
-                                    "PREPARER" -> {
-                                        viewModel.selectedSessionIdForBuilder = null
-                                        currentDestination = AppDestinations.SESSION_BUILDER
-                                    }
-                                    else -> if (dest.startsWith("COMPANION_")) {
-                                        isLaunchingTerrain = true
-                                        viewModel.selectedSessionIdForBuilder = dest.removePrefix("COMPANION_")
-                                        currentDestination = AppDestinations.SESSION_COMPANION
-                                    }
-                                }
+                                )
                             }
-                        )
-                        AppDestinations.SEASON_CALENDAR -> SeasonCalendarScreen(
+                            AppDestinations.SEASON_CALENDAR -> SeasonCalendarScreen(
                             modifier = modifier,
                             persistenceManager = persistenceManager,
-                            seasonConfig = viewModel.seasonConfig,
+                            seasonConfig = mergedSeasonConfig,
                             viewModel = viewModel,
-                            presidentViewModel = presidentViewModel,
+                            trainingViewModel = trainingViewModel,
                             onUseHelp = { viewModel.useHelp() },
                             helpUsageCount = viewModel.getHelpUsageCountThisMonth(),
+                            onUpdateAttendance = { id, status -> viewModel.updateClubEventAttendance(id, status) },
                             onNavigateToPreparer = { session ->
                                 if (!viewModel.seasonConfig.plannedTrainings.any { it.id == session.id }) {
                                     viewModel.updateSeasonConfig(viewModel.seasonConfig.copy(
@@ -221,7 +327,8 @@ fun CoachAppApp(viewModel: CoachViewModel = viewModel()) {
                             TeamHubScreen(
                                 modifier = modifier,
                                 viewModel = presidentViewModel,
-                                seasonConfig = viewModel.seasonConfig,
+                                trainingViewModel = trainingViewModel,
+                                seasonConfig = mergedSeasonConfig,
                                 onUpdateConfig = { viewModel.updateSeasonConfig(it) }
                             )
                         }
@@ -240,27 +347,27 @@ fun CoachAppApp(viewModel: CoachViewModel = viewModel()) {
 
                             when {
                                 trainingSession != null -> {
-                                    val team = viewModel.seasonConfig.teams.find { it.id == trainingSession.teamId }
+                                    val team = mergedSeasonConfig.teams.find { it.id == trainingSession.teamId }
                                     SessionCompanionScreen(
                                         modifier = modifier,
                                         session = trainingSession,
                                         teamName = team?.name ?: "Inconnu",
                                         persistenceManager = persistenceManager,
-                                        onUpdateSession = { viewModel.updateSeasonConfig(viewModel.seasonConfig.copy(plannedTrainings = viewModel.seasonConfig.plannedTrainings.map { s -> if (s.id == it.id) it else s })) },
+                                        onUpdateSession = { viewModel.updateSeasonConfig(mergedSeasonConfig.copy(plannedTrainings = mergedSeasonConfig.plannedTrainings.map { s -> if (s.id == it.id) it else s })) },
                                         onFinish = { 
                                             viewModel.currentAssessmentType = com.example.coachapp.data.AssessmentType.FLASH
                                             currentDestination = AppDestinations.DIAGNOSTIC 
                                         },
                                         onBack = { currentDestination = AppDestinations.DASHBOARD },
                                         onPushSession = { 
-                                            presidentViewModel.pushSession(it, onSuccess = {}, onError = {})
+                                            trainingViewModel.pushSession(it, onSuccess = {}, onError = {})
                                         }
                                     )
                                 }
                                 else -> { 
                                     MatchDashboardScreen(
                                         modifier = modifier,
-                                        seasonConfig = viewModel.seasonConfig,
+                                        seasonConfig = mergedSeasonConfig,
                                         persistenceManager = persistenceManager,
                                         onUpdatePlayer = { viewModel.updatePlayer(it) }
                                     )
@@ -269,23 +376,31 @@ fun CoachAppApp(viewModel: CoachViewModel = viewModel()) {
                         }
                         AppDestinations.MATCH_BOARD -> MatchDashboardScreen(
                             modifier = modifier,
-                            seasonConfig = viewModel.seasonConfig,
+                            seasonConfig = mergedSeasonConfig,
                             persistenceManager = persistenceManager,
                             onUpdatePlayer = { viewModel.updatePlayer(it) }
                         )
                         AppDestinations.SESSION_BUILDER -> SessionBuilderScreen(
                             modifier = modifier,
-                            seasonConfig = viewModel.seasonConfig,
+                            seasonConfig = mergedSeasonConfig,
                             initialSessionId = viewModel.selectedSessionIdForBuilder,
-                            onUpdateSession = { viewModel.updateSeasonConfig(viewModel.seasonConfig.copy(plannedTrainings = viewModel.seasonConfig.plannedTrainings.map { s -> if (s.id == it.id) it else s })) },
+                            onUpdateSession = { viewModel.updateSeasonConfig(mergedSeasonConfig.copy(plannedTrainings = mergedSeasonConfig.plannedTrainings.map { s -> if (s.id == it.id) it else s })) },
                             onPushSession = {
-                                presidentViewModel.pushSession(it, onSuccess = {}, onError = {})
+                                trainingViewModel.pushSession(it, onSuccess = {}, onError = {})
                             },
                             onBack = { currentDestination = AppDestinations.SEASON_CALENDAR }
                         )
                         AppDestinations.INSIGHTS -> InsightsScreen(
                             modifier = modifier,
-                            seasonConfig = viewModel.seasonConfig
+                            seasonConfig = mergedSeasonConfig,
+                            onNavigate = { dest ->
+                                when (dest) {
+                                    "COACH_SPACE_VESTIAIRE" -> {
+                                        viewModel.coachSpaceTab = 0
+                                        currentDestination = AppDestinations.COACH_SPACE
+                                    }
+                                }
+                            }
                         )
                         AppDestinations.DIAGNOSTIC -> AssessmentScreen(
                             modifier = modifier,
@@ -298,14 +413,16 @@ fun CoachAppApp(viewModel: CoachViewModel = viewModel()) {
                         AppDestinations.PROFILE -> ProfileScreen(
                             modifier = modifier,
                             history = viewModel.history,
-                            seasonConfig = viewModel.seasonConfig,
+                            seasonConfig = mergedSeasonConfig,
                             userRole = viewModel.userRole,
                             isCoachCde = viewModel.isCoachCde,
+                            isStageOpen = viewModel.isStageOpen,                 // ← nouveau
                             cdeAssignments = viewModel.cdeAssignments,
                             vivierPrincipal = viewModel.vivierPrincipal,    // ← ajoute
                             vivierInferieur = viewModel.vivierInferieur,
                             slotsPersistes = viewModel.slotsPersistes,          // ← nouveau
                             bancPersiste = viewModel.bancPersiste,               // ← nouveau
+                            selectionAlerteMessage = viewModel.selectionAlerteMessage, // ← nouveau
                             onOuverture = { categorie ->                         // ← nouveau
                                 val quota = com.example.coachapp.ui.screens.quotaParCategorie(categorie)
                                 viewModel.creerOuChargerConvocation(categorie, quota)
@@ -316,6 +433,9 @@ fun CoachAppApp(viewModel: CoachViewModel = viewModel()) {
                             onSauvegarder = { principal, banc ->
                                 viewModel.sauvegarderSelection(principal, banc)
                                 viewModel.finaliserConvocation()
+                            },
+                            onEnvoyerSelection = { categorie ->                  // ← nouveau
+                                viewModel.envoyerSelection(categorie)
                             },
                             onUpdateConfig = { viewModel.updateSeasonConfig(it) },
                             onLogout = { viewModel.logout() },
@@ -336,7 +456,7 @@ fun CoachAppApp(viewModel: CoachViewModel = viewModel()) {
                                         currentDestination = AppDestinations.SESSION_BUILDER 
                                     },
                                     onExportToLabo = { currentDestination = AppDestinations.COACH_SPACE },
-                                    onUpdateSession = { viewModel.updateSeasonConfig(viewModel.seasonConfig.copy(plannedTrainings = viewModel.seasonConfig.plannedTrainings.map { s -> if (s.id == it.id) it else s })) }
+                                    onUpdateSession = { viewModel.updateSeasonConfig(mergedSeasonConfig.copy(plannedTrainings = mergedSeasonConfig.plannedTrainings.map { s -> if (s.id == it.id) it else s })) }
                                 )
                             } else {
                                 currentDestination = AppDestinations.SEASON_CALENDAR

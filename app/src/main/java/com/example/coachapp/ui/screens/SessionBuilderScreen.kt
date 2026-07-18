@@ -26,7 +26,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.runtime.rememberCoroutineScope
-import com.example.coachapp.data.VoiceInputManager
+import com.example.coachapp.data.LocalVoiceManager
 import kotlinx.coroutines.launch
 import androidx.compose.ui.platform.LocalContext
 import java.util.*
@@ -208,14 +208,15 @@ fun PhaseCard(
     onUpdate: (String, Int) -> Unit
 ) {
     val context = LocalContext.current
-    val scope = rememberCoroutineScope()
-    var isRecording by remember { mutableStateOf(false) }
-    var isTranscribing by remember { mutableStateOf(false) }
-    val voiceManager = remember { VoiceInputManager(context) }
+    val voiceManager = remember { LocalVoiceManager(context) }
+    val partialText by voiceManager.partialText.collectAsState()
+    val isRecordingLocal by voiceManager.isRecording.collectAsState()
+    var baseText by remember { mutableStateOf("") }
 
-    DisposableEffect(Unit) {
-        onDispose {
-            voiceManager.nettoyerCache()
+    LaunchedEffect(partialText) {
+        if (isRecordingLocal && partialText.isNotBlank()) {
+            val combined = if (baseText.isBlank()) partialText else "$baseText\n$partialText"
+            onUpdate(combined, duration)
         }
     }
 
@@ -223,8 +224,8 @@ fun PhaseCard(
         ActivityResultContracts.RequestPermission()
     ) { granted ->
         if (granted) {
-            isRecording = true
-            voiceManager.demarrerEnregistrement()
+            baseText = text
+            voiceManager.startListeningAndRecording()
         }
     }
 
@@ -277,54 +278,33 @@ fun PhaseCard(
                 modifier = Modifier.fillMaxWidth().height(100.dp),
                 placeholder = { Text("Détail de l'exercice...") },
                 trailingIcon = {
-                    when {
-                        isTranscribing -> {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(20.dp),
-                                strokeWidth = 2.dp
+                    if (isRecordingLocal) {
+                        IconButton(onClick = {
+                            val file = voiceManager.stopListeningAndRecording()
+                            voiceManager.deleteFile(file)
+                        }) {
+                            Icon(
+                                Icons.Default.Stop,
+                                null,
+                                tint = Color.Red
                             )
                         }
-                        isRecording -> {
-                            IconButton(onClick = {
-                                // Arrêter l'enregistrement et transcrire
-                                scope.launch {
-                                    isRecording = false
-                                    isTranscribing = true
-                                    val fichier = voiceManager.arreterEnregistrement()
-                                    if (fichier != null) {
-                                        val transcription = voiceManager.transcrire(fichier)
-                                        val nouveauTexte = if (text.isBlank()) transcription
-                                        else "$text\n$transcription"
-                                        onUpdate(nouveauTexte, duration)
-                                        fichier.delete()
-                                    }
-                                    isTranscribing = false
-                                }
-                            }) {
-                                Icon(
-                                    Icons.Default.Stop,
-                                    null,
-                                    tint = Color.Red
-                                )
-                            }
-                        }
-                        else -> {
-                            IconButton(onClick = {
-                                permissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
-                            }) {
-                                Icon(
-                                    Icons.Default.Mic,
-                                    null,
-                                    tint = MaterialTheme.colorScheme.primary
-                                )
-                            }
+                    } else {
+                        IconButton(onClick = {
+                            permissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+                        }) {
+                            Icon(
+                                Icons.Default.Mic,
+                                null,
+                                tint = MaterialTheme.colorScheme.primary
+                            )
                         }
                     }
                 }
             )
 
             // Indicateur d'enregistrement
-            if (isRecording) {
+            if (isRecordingLocal) {
                 Spacer(Modifier.height(4.dp))
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
@@ -343,14 +323,6 @@ fun PhaseCard(
                 }
             }
 
-            if (isTranscribing) {
-                Spacer(Modifier.height(4.dp))
-                Text(
-                    "Transcription en cours...",
-                    fontSize = 11.sp,
-                    color = MaterialTheme.colorScheme.primary
-                )
-            }
         }
     }
 }

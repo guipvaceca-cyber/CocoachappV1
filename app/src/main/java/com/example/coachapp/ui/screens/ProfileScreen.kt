@@ -1,5 +1,7 @@
 package com.example.coachapp.ui.screens
 
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -7,12 +9,17 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.blur
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -29,156 +36,205 @@ fun ProfileScreen(
     seasonConfig: SeasonConfig = SeasonConfig(),
     userRole: com.example.coachapp.data.UserRole = com.example.coachapp.data.UserRole.USER,
     isCoachCde: Boolean = false,
+    isStageOpen: Boolean = false,
     cdeAssignments: List<com.example.coachapp.data.CdeAssignment> = emptyList(),
     vivierPrincipal: List<JoueurVivier> = emptyList(),
     vivierInferieur: List<JoueurVivier> = emptyList(),
     slotsPersistes: List<com.example.coachapp.ui.screens.JoueurSlot?> = emptyList(),
     bancPersiste: List<com.example.coachapp.ui.screens.JoueurSlot?> = emptyList(),
+    selectionAlerteMessage: String? = null,
     onOuverture: (categorie: String) -> Unit = {},
     onSlotChange: (index: Int, type: String, joueur: com.example.coachapp.ui.screens.JoueurSlot?) -> Unit = { _, _, _ -> },
     onSauvegarder: (principal: List<com.example.coachapp.ui.screens.JoueurSlot?>, banc: List<com.example.coachapp.ui.screens.JoueurSlot?>) -> Unit = { _, _ -> },
+    onEnvoyerSelection: (categorie: String) -> Unit = {},
     onUpdateConfig: (SeasonConfig) -> Unit = {},
     onLogout: () -> Unit = {},
     onNavigateToPresident: () -> Unit = {},
     onNavigateToGlobalAssessment: () -> Unit = {}
 ) {
-    android.util.Log.d("DEBUG_CDE_PROFILE", "isCoachCde: $isCoachCde, assignments: ${cdeAssignments.size}")
     val dateFormat = remember { SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.getDefault()) }
     var expandedSection by remember { mutableStateOf("IDENTITY") }
     var categorieEnConvocation by remember { mutableStateOf<String?>(null) }
 
-    Column(
+    Box(
         modifier = modifier
             .fillMaxSize()
-            .padding(16.dp)
-            .verticalScroll(rememberScrollState())
+            .background(Color(0xFF001529)) // Same Deep Blue as Dashboard
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text("Mon Profil", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Black)
-                Text(
-                    text = "Coach ${seasonConfig.coachProfile.nickname.ifEmpty { seasonConfig.coachProfile.firstName }}",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.primary
-                )
-            }
-            RoleBadge(userRole)
-        }
+        // Decorative Blur Blobs
+        Box(
+            modifier = Modifier
+                .offset(x = (-50).dp, y = 100.dp)
+                .size(250.dp)
+                .background(Color(0xFF9C27B0).copy(alpha = 0.15f), CircleShape)
+                .blur(80.dp)
+        )
+        Box(
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .offset(x = 50.dp, y = 50.dp)
+                .size(300.dp)
+                .background(Color(0xFF2196F3).copy(alpha = 0.15f), CircleShape)
+                .blur(90.dp)
+        )
 
-        Spacer(modifier = Modifier.height(24.dp))
-
-        // --- SECTION 1 : IDENTITY ---
-        ProfileExpandableSection(
-            title = "Ma Carte d'Identité",
-            description = "Gérez votre nom, surnom et club d'appartenance.",
-            icon = Icons.Default.Person,
-            isExpanded = expandedSection == "IDENTITY",
-            onToggle = { expandedSection = if (expandedSection == "IDENTITY") "" else "IDENTITY" }
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(16.dp)
+                .verticalScroll(rememberScrollState())
         ) {
-            Column(modifier = Modifier.padding(8.dp)) {
-                Text("Prénom: ${seasonConfig.coachProfile.firstName}", fontWeight = FontWeight.Bold)
-                Text("Nom: ${seasonConfig.coachProfile.lastName}")
-                Text("Surnom: ${seasonConfig.coachProfile.nickname}")
-                Text("Club: ${seasonConfig.coachProfile.clubName}")
-                Text("Niveau: ${seasonConfig.coachProfile.formationLevel}")
-                Text("Persona: ${seasonConfig.coachProfile.coachPersona}")
-            }
-        }
-
-        Spacer(modifier = Modifier.height(12.dp))
-
-        // --- SECTION 2 : HISTORY ---
-        ProfileExpandableSection(
-            title = "Mon Historique de Bilan",
-            description = "Retrouvez vos diagnostics de carrière passés.",
-            icon = Icons.Default.History,
-            isExpanded = expandedSection == "HISTORY",
-            onToggle = { expandedSection = if (expandedSection == "HISTORY") "" else "HISTORY" }
-        ) {
-            HistoryListInProfile(history, dateFormat)
-        }
-
-        // --- SECTION 3 : HUB CDE (visible uniquement si coach CDE) ---
-        if (isCoachCde) {
-            cdeAssignments.forEach { assignment ->
-                Spacer(modifier = Modifier.height(12.dp))
-                val isPrincipalRole = assignment.role == "selection_principal"
-                val displaySexe = if (assignment.sexe == "M") "Masculin" else if (assignment.sexe == "F") "Féminin" else ""
-                
-                ProfileExpandableSection(
-                    title = "Hub CDE — ${assignment.categorie} $displaySexe",
-                    description = if (isPrincipalRole) "Coach principal · Sélection "
-                    else "Coach adjoint · Vue lecture",
-                    icon = Icons.Default.Stars,
-                    isExpanded = expandedSection == "CDE_${assignment.categorie}_${assignment.sexe}",
-                    onToggle = { 
-                        val key = "CDE_${assignment.categorie}_${assignment.sexe}"
-                        expandedSection = if (expandedSection == key) "" else key 
-                    }
-                ) {
-                    HubCdeContent(
-                        cdeCategorie = assignment.categorie,
-                        cdeRole = assignment.role,
-                        isPrincipal = isPrincipalRole,
-                        slots = slotsPersistes,
-                        onShowConvocation = { categorieEnConvocation = assignment.categorie }
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        "Mon Profil", 
+                        style = MaterialTheme.typography.headlineLarge, 
+                        fontWeight = FontWeight.Black,
+                        color = Color.White
+                    )
+                    Text(
+                        text = "Coach ${seasonConfig.coachProfile.nickname.ifEmpty { seasonConfig.coachProfile.firstName }}",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF00B4D8)
                     )
                 }
+                RoleBadge(userRole)
             }
-        }
 
-        // --- SECTION 4 : HUB PRÉSIDENT (visible uniquement si rôle Président) ---
-        if (userRole == com.example.coachapp.data.UserRole.PRESIDENT_CLUB) {
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(24.dp))
+
+            // --- SECTION 1 : IDENTITY ---
             ProfileExpandableSection(
-                title = "Hub Président",
-                description = "Gérez vos collectifs et vos coachs.",
-                icon = Icons.Default.Business,
-                isExpanded = expandedSection == "PRESIDENT",
-                onToggle = { expandedSection = if (expandedSection == "PRESIDENT") "" else "PRESIDENT" }
+                title = "Ma Carte d'Identité",
+                description = "Gérez votre identité et club.",
+                icon = Icons.Default.Person,
+                isExpanded = expandedSection == "IDENTITY",
+                onToggle = { expandedSection = if (expandedSection == "IDENTITY") "" else "IDENTITY" }
             ) {
-                Column(modifier = Modifier.padding(8.dp)) {
-                    Text("Gestion du club : ${seasonConfig.coachProfile.clubName.ifEmpty { "Mon Club" }}", fontWeight = FontWeight.Bold)
-                    Spacer(Modifier.height(8.dp))
-                    Button(
-                        onClick = onNavigateToPresident,
-                        modifier = Modifier.fillMaxWidth()
+                Column(modifier = Modifier.padding(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    IdentityRow("Prénom", seasonConfig.coachProfile.firstName)
+                    IdentityRow("Nom", seasonConfig.coachProfile.lastName)
+                    IdentityRow("Surnom", seasonConfig.coachProfile.nickname)
+                    IdentityRow("Club", seasonConfig.coachProfile.clubName)
+                    IdentityRow("Niveau", seasonConfig.coachProfile.formationLevel)
+                    IdentityRow("Persona", seasonConfig.coachProfile.coachPersona)
+                }
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // --- SECTION 2 : HISTORY ---
+            ProfileExpandableSection(
+                title = "Historique",
+                description = "Retrouvez vos bilans passés.",
+                icon = Icons.Default.History,
+                isExpanded = expandedSection == "HISTORY",
+                onToggle = { expandedSection = if (expandedSection == "HISTORY") "" else "HISTORY" }
+            ) {
+                HistoryListInProfile(history, dateFormat)
+            }
+
+            // --- SECTION 3 : HUB CDE ---
+            if (isCoachCde) {
+                cdeAssignments.forEach { assignment ->
+                    Spacer(modifier = Modifier.height(12.dp))
+                    val isPrincipalRole = assignment.role == "selection_principal"
+                    val displaySexe = if (assignment.sexe == "M") "Masculin" else if (assignment.sexe == "F") "Féminin" else ""
+                    
+                    ProfileExpandableSection(
+                        title = "Hub CDE — ${assignment.categorie} $displaySexe",
+                        description = if (isPrincipalRole) "Coach principal · Sélection " else "Coach adjoint · Lecture",
+                        icon = Icons.Default.Stars,
+                        isExpanded = expandedSection == "CDE_${assignment.categorie}_${assignment.sexe}",
+                        onToggle = { 
+                            val key = "CDE_${assignment.categorie}_${assignment.sexe}"
+                            expandedSection = if (expandedSection == key) "" else key 
+                        }
                     ) {
-                        Icon(Icons.Default.Dashboard, null)
-                        Spacer(Modifier.width(8.dp))
-                        Text("Ouvrir le Tableau de Bord Club")
+                        HubCdeContent(
+                            cdeCategorie = assignment.categorie,
+                            cdeRole = assignment.role,
+                            isPrincipal = isPrincipalRole,
+                            isStageOpen = isStageOpen,
+                            slots = slotsPersistes,
+                            alerteMessage = selectionAlerteMessage,
+                            onShowConvocation = { categorieEnConvocation = assignment.categorie },
+                            onEnvoyer = { onEnvoyerSelection(assignment.categorie) }
+                        )
                     }
                 }
             }
-        }
 
-        Spacer(modifier = Modifier.height(40.dp))
+            // --- SECTION 4 : HUB ADMINISTRATION ---
+            if (userRole == com.example.coachapp.data.UserRole.PRESIDENT_CLUB || userRole == com.example.coachapp.data.UserRole.REFERENT_TECH) {
+                Spacer(modifier = Modifier.height(12.dp))
+                ProfileExpandableSection(
+                    title = if (userRole == com.example.coachapp.data.UserRole.PRESIDENT_CLUB) "Hub Président" else "Hub Référent Technique",
+                    description = "Gérez les collectifs et effectifs.",
+                    icon = Icons.Default.Business,
+                    isExpanded = expandedSection == "PRESIDENT",
+                    onToggle = { expandedSection = if (expandedSection == "PRESIDENT") "" else "PRESIDENT" }
+                ) {
+                    Column(modifier = Modifier.padding(8.dp)) {
+                        Text(
+                            "Administration : ${seasonConfig.coachProfile.clubName.ifEmpty { "Mon Club" }}", 
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White
+                        )
+                        Spacer(Modifier.height(16.dp))
+                        Button(
+                            onClick = onNavigateToPresident,
+                            modifier = Modifier.fillMaxWidth().height(48.dp),
+                            shape = RoundedCornerShape(12.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = Color.White.copy(alpha = 0.2f), contentColor = Color.White),
+                            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.3f))
+                        ) {
+                            Icon(Icons.Default.Dashboard, null, modifier = Modifier.size(20.dp))
+                            Spacer(Modifier.width(12.dp))
+                            Text("Ouvrir le Tableau de Bord Club", fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+            }
 
-        OutlinedButton(
-            onClick = onNavigateToGlobalAssessment,
-            modifier = Modifier.fillMaxWidth().height(56.dp),
-            shape = RoundedCornerShape(12.dp)
-        ) {
-            Icon(Icons.Default.Assessment, null)
-            Spacer(Modifier.width(8.dp))
-            Text("Lancer mon Bilan de Carrière")
-        }
+            Spacer(modifier = Modifier.height(40.dp))
 
-        Spacer(modifier = Modifier.height(16.dp))
+            Button(
+                onClick = onNavigateToGlobalAssessment,
+                modifier = Modifier.fillMaxWidth().height(60.dp),
+                shape = RoundedCornerShape(16.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF673AB7)),
+                elevation = ButtonDefaults.buttonElevation(defaultElevation = 8.dp)
+            ) {
+                Icon(Icons.Default.Assessment, null, tint = Color.White)
+                Spacer(Modifier.width(12.dp))
+                Text("Lancer mon Bilan de Carrière", fontWeight = FontWeight.ExtraBold, fontSize = 16.sp)
+            }
 
-        Button(
-            onClick = onLogout,
-            modifier = Modifier.fillMaxWidth().height(56.dp),
-            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
-            shape = RoundedCornerShape(12.dp)
-        ) {
-            Icon(Icons.Default.Logout, null)
-            Spacer(Modifier.width(8.dp))
-            Text("Déconnexion & Réinitialisation", fontWeight = FontWeight.Bold)
+            Spacer(modifier = Modifier.height(16.dp))
+
+            OutlinedButton(
+                onClick = onLogout,
+                modifier = Modifier.fillMaxWidth().height(56.dp),
+                border = BorderStroke(1.dp, Color.Red.copy(alpha = 0.5f)),
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.Red),
+                shape = RoundedCornerShape(16.dp)
+            ) {
+                Icon(Icons.Default.Logout, null, modifier = Modifier.size(20.dp))
+                Spacer(Modifier.width(12.dp))
+                Text("Déconnexion", fontWeight = FontWeight.Bold)
+            }
+            
+            Spacer(modifier = Modifier.height(100.dp))
         }
     }
 
     if (categorieEnConvocation != null) {
+        val isPrincipal = cdeAssignments.find { it.categorie == categorieEnConvocation }?.role == "selection_principal"
         ConvocationSheet(
             isVisible = true,
             onDismiss = { categorieEnConvocation = null },
@@ -187,10 +243,19 @@ fun ProfileScreen(
             vivierInferieur = vivierInferieur,
             slotsPersistes = slotsPersistes,
             bancPersiste = bancPersiste,
+            isEditable = isPrincipal,
             onOuverture = { onOuverture(categorieEnConvocation!!) },
             onSlotChange = { index, type, joueur -> onSlotChange(index, type, joueur) },
             onSauvegarder = { principal, banc -> onSauvegarder(principal, banc) }
         )
+    }
+}
+
+@Composable
+fun IdentityRow(label: String, value: String) {
+    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+        Text(label, color = Color.White.copy(alpha = 0.6f), style = MaterialTheme.typography.bodySmall)
+        Text(value.ifEmpty { "Non renseigné" }, color = Color.White, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodySmall)
     }
 }
 
@@ -202,78 +267,124 @@ fun HubCdeContent(
     cdeCategorie: String,
     cdeRole: String,
     isPrincipal: Boolean,
+    isStageOpen: Boolean = false,
     slots: List<JoueurSlot?>,
-    onShowConvocation: () -> Unit
+    alerteMessage: String? = null,
+    onShowConvocation: () -> Unit,
+    onEnvoyer: () -> Unit = {}
 ) {
     val countConvoques = slots.count { it != null }
 
     Column(modifier = Modifier.padding(8.dp)) {
+        if (isStageOpen && isPrincipal) {
+            Surface(
+                modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
+                color = Color(0xFF1D9E75).copy(alpha = 0.2f),
+                shape = RoundedCornerShape(12.dp),
+                border = BorderStroke(1.dp, Color(0xFF1D9E75).copy(alpha = 0.5f))
+            ) {
+                Row(
+                    modifier = Modifier.padding(12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(Icons.Default.NotificationsActive, null, tint = Color(0xFF4CAF50), modifier = Modifier.size(20.dp))
+                    Spacer(Modifier.width(12.dp))
+                    Column {
+                        Text("Inscriptions Ouvertes", fontWeight = FontWeight.Black, fontSize = 14.sp, color = Color.White)
+                        Text("Le stage $cdeCategorie est ouvert. Finalisez votre liste !", fontSize = 11.sp, color = Color.White.copy(alpha = 0.7f))
+                    }
+                }
+            }
+        }
 
-        // Badge rôle CDE
+        if (alerteMessage != null) {
+            Surface(
+                modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
+                color = Color.Red.copy(alpha = 0.15f),
+                shape = RoundedCornerShape(12.dp),
+                border = BorderStroke(1.dp, Color.Red.copy(alpha = 0.4f))
+            ) {
+                Row(
+                    modifier = Modifier.padding(12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(Icons.Default.ErrorOutline, null, tint = Color.Red, modifier = Modifier.size(20.dp))
+                    Spacer(Modifier.width(12.dp))
+                    Text(alerteMessage, fontSize = 12.sp, color = Color.White, fontWeight = FontWeight.Bold)
+                }
+            }
+        }
+
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(bottom = 12.dp)) {
             Surface(
-                color = if (isPrincipal) Color(0xFFE6F1FB) else Color(0xFFF1EFE8),
-                shape = RoundedCornerShape(8.dp)
+                color = if (isPrincipal) Color(0xFF0C447C).copy(alpha = 0.2f) else Color(0xFF5F5E5A).copy(alpha = 0.2f),
+                shape = RoundedCornerShape(8.dp),
+                border = BorderStroke(0.5.dp, Color.White.copy(alpha = 0.2f))
             ) {
                 Text(
                     text = if (isPrincipal) "Sélectionneur Principal" else "Coach Adjoint",
                     modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
-                    fontSize = 12.sp,
+                    fontSize = 11.sp,
                     fontWeight = FontWeight.Bold,
-                    color = if (isPrincipal) Color(0xFF0C447C) else Color(0xFF5F5E5A)
+                    color = Color.White
                 )
             }
             Spacer(Modifier.width(8.dp))
             Surface(
-                color = Color(0xFFE1F5EE),
-                shape = RoundedCornerShape(8.dp)
+                color = Color(0xFF4CAF50).copy(alpha = 0.2f),
+                shape = RoundedCornerShape(8.dp),
+                border = BorderStroke(0.5.dp, Color.White.copy(alpha = 0.2f))
             ) {
                 Text(
                     text = cdeCategorie,
                     modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
-                    fontSize = 12.sp,
+                    fontSize = 11.sp,
                     fontWeight = FontWeight.Bold,
-                    color = Color(0xFF085041)
+                    color = Color.White
                 )
             }
         }
 
-        HorizontalDivider(modifier = Modifier.padding(bottom = 12.dp))
-
-        // Accès aux convocations
-        Text(
-            "Convocations",
-            style = MaterialTheme.typography.labelMedium,
-            fontWeight = FontWeight.Bold,
-            modifier = Modifier.padding(bottom = 8.dp)
-        )
+        Spacer(modifier = Modifier.height(8.dp))
 
         Surface(
-            color = if (countConvoques > 0) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)
-                    else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-            shape = RoundedCornerShape(8.dp),
-            modifier = Modifier.fillMaxWidth()
+            color = Color.White.copy(alpha = 0.05f),
+            shape = RoundedCornerShape(12.dp),
+            modifier = Modifier.fillMaxWidth(),
+            border = BorderStroke(0.5.dp, Color.White.copy(alpha = 0.1f))
         ) {
             Column(modifier = Modifier.padding(12.dp)) {
                 Text(
-                    text = if (countConvoques > 0) "$countConvoques convocation${if(countConvoques>1) "s" else ""} en cours"
-                           else "Aucune convocation en cours",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = if (countConvoques > 0) MaterialTheme.colorScheme.primary else Color.Gray,
-                    fontWeight = if (countConvoques > 0) FontWeight.Bold else FontWeight.Normal
+                    text = if (countConvoques > 0) "$countConvoques convocation${if(countConvoques>1) "s" else ""} en attente de validation"
+                           else "Aucune convocation en attente",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = if (countConvoques > 0) Color(0xFF00B4D8) else Color.White.copy(alpha = 0.5f),
+                    fontWeight = FontWeight.Bold
                 )
                 if (isPrincipal) {
                     Spacer(Modifier.height(8.dp))
-                    TextButton(
-                        onClick = { 
-                            android.util.Log.d("DEBUG_CDE", "Click Nouvelle convocation")
-                            onShowConvocation()
-                        },
-                        contentPadding = PaddingValues(0.dp)
+                    Button(
+                        onClick = onShowConvocation,
+                        modifier = Modifier.fillMaxWidth().height(40.dp),
+                        shape = RoundedCornerShape(8.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color.White, contentColor = Color.Black)
                     ) {
-                        Icon(Icons.Default.Add, null, modifier = Modifier.size(16.dp))
-                        Spacer(Modifier.width(4.dp))
-                        Text(if (countConvoques > 0) "Modifier la sélection" else "Nouvelle convocation", fontSize = 13.sp)
+                        Icon(Icons.Default.Add, null, modifier = Modifier.size(14.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text(if (countConvoques > 0) "Modifier la sélection" else "Nouvelle convocation", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    }
+                } else if (countConvoques > 0) {
+                    Spacer(Modifier.height(8.dp))
+                    Button(
+                        onClick = onShowConvocation,
+                        modifier = Modifier.fillMaxWidth().height(40.dp),
+                        shape = RoundedCornerShape(8.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color.White.copy(alpha = 0.2f), contentColor = Color.White),
+                        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.3f))
+                    ) {
+                        Icon(Icons.Default.Visibility, null, modifier = Modifier.size(14.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text("Consulter la sélection", fontSize = 12.sp, fontWeight = FontWeight.Bold)
                     }
                 }
             }
@@ -281,66 +392,97 @@ fun HubCdeContent(
 
         if (countConvoques > 0) {
             Spacer(modifier = Modifier.height(16.dp))
-            HorizontalDivider(modifier = Modifier.padding(bottom = 12.dp), thickness = 0.5.dp)
-            
             Text(
                 "Sélection en cours",
                 style = MaterialTheme.typography.labelMedium,
                 fontWeight = FontWeight.Bold,
+                color = Color.White.copy(alpha = 0.7f),
                 modifier = Modifier.padding(bottom = 8.dp)
             )
 
-            // Petit tableau récap
             Card(
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-                shape = RoundedCornerShape(8.dp)
+                colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.05f)),
+                border = BorderStroke(0.5.dp, Color.White.copy(alpha = 0.1f)),
+                shape = RoundedCornerShape(12.dp)
             ) {
                 Column(modifier = Modifier.fillMaxWidth()) {
                     slots.filterNotNull().forEachIndexed { idx, joueur ->
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(horizontal = 12.dp, vertical = 8.dp),
+                                .padding(horizontal = 12.dp, vertical = 10.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(
                                 text = "${idx + 1}.",
-                                style = MaterialTheme.typography.bodySmall,
+                                style = MaterialTheme.typography.labelSmall,
                                 modifier = Modifier.width(24.dp),
-                                color = Color.Gray
+                                color = Color.White.copy(alpha = 0.4f)
                             )
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
                                     "${joueur.prenom} ${joueur.nom}",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    fontWeight = FontWeight.Bold
+                                    style = MaterialTheme.typography.labelLarge,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color.White
                                 )
                                 Text(
                                     joueur.club,
                                     style = MaterialTheme.typography.labelSmall,
-                                    color = Color.Gray
+                                    color = Color.White.copy(alpha = 0.6f)
                                 )
                             }
                             if (joueur.estSurclasse) {
                                 Surface(
-                                    color = Color(0xFFFFEBEE),
-                                    shape = RoundedCornerShape(4.dp)
+                                    color = Color.Red.copy(alpha = 0.2f),
+                                    shape = RoundedCornerShape(4.dp),
+                                    border = BorderStroke(0.5.dp, Color.Red.copy(alpha = 0.4f))
                                 ) {
                                     Text(
-                                        "S",
-                                        modifier = Modifier.padding(horizontal = 4.dp),
-                                        fontSize = 9.sp,
+                                        "SURCLASSÉ",
+                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                        fontSize = 8.sp,
                                         color = Color.Red,
-                                        fontWeight = FontWeight.Bold
+                                        fontWeight = FontWeight.Black
                                     )
                                 }
                             }
                         }
                         if (idx < slots.filterNotNull().size - 1) {
-                            HorizontalDivider(modifier = Modifier.padding(horizontal = 12.dp), thickness = 0.5.dp)
+                            HorizontalDivider(modifier = Modifier.padding(horizontal = 12.dp), thickness = 0.5.dp, color = Color.White.copy(alpha = 0.05f))
                         }
                     }
+                }
+            }
+
+            if (isPrincipal) {
+                Spacer(modifier = Modifier.height(16.dp))
+                
+                if (countConvoques < 14) {
+                    Surface(
+                        color = Color.Yellow.copy(alpha = 0.1f),
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+                        border = BorderStroke(0.5.dp, Color.Yellow.copy(alpha = 0.3f))
+                    ) {
+                        Row(modifier = Modifier.padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.Warning, null, tint = Color.Yellow, modifier = Modifier.size(14.dp))
+                            Spacer(Modifier.width(8.dp))
+                            Text("Sélection incomplète (14 places disponibles)", fontSize = 10.sp, color = Color.White.copy(alpha = 0.8f))
+                        }
+                    }
+                }
+
+                Button(
+                    onClick = onEnvoyer,
+                    modifier = Modifier.fillMaxWidth().height(48.dp),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1D9E75), contentColor = Color.White),
+                    enabled = true
+                ) {
+                    Icon(Icons.AutoMirrored.Filled.Send, null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(12.dp))
+                    Text("Finaliser et Envoyer ma sélection", fontWeight = FontWeight.Bold)
                 }
             }
         }
@@ -354,29 +496,31 @@ fun HubCdeContent(
 @Composable
 fun RoleBadge(role: com.example.coachapp.data.UserRole) {
     val (label, color, icon) = when (role) {
-        com.example.coachapp.data.UserRole.USER           -> Triple("USER",      Color.Gray,                          Icons.Default.Person)
-        com.example.coachapp.data.UserRole.ADMIN          -> Triple("ADMIN",     MaterialTheme.colorScheme.primary,   Icons.Default.Shield)
-        com.example.coachapp.data.UserRole.MEGADMIN       -> Triple("MEGADMIN",  Color.Red,                           Icons.Default.AutoAwesome)
-        com.example.coachapp.data.UserRole.PRESIDENT_CLUB -> Triple("PRÉSIDENT", Color(0xFFFF9800),                  Icons.Default.Stars)
+        com.example.coachapp.data.UserRole.USER           -> Triple("USER",      Color.Gray,       Icons.Default.Person)
+        com.example.coachapp.data.UserRole.ADMIN          -> Triple("ADMIN",     Color(0xFF2196F3), Icons.Default.Shield)
+        com.example.coachapp.data.UserRole.MEGADMIN       -> Triple("MEGADMIN",  Color.Red,        Icons.Default.AutoAwesome)
+        com.example.coachapp.data.UserRole.PRESIDENT_CLUB -> Triple("PRÉSIDENT", Color(0xFFFF9800), Icons.Default.Stars)
+        com.example.coachapp.data.UserRole.REFERENT_TECH  -> Triple("REF. TECH", Color(0xFF00B4D8), Icons.Default.ManageAccounts)
     }
 
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         Surface(
-            color = color.copy(alpha = 0.1f),
-            shape = CircleShape,
-            modifier = Modifier.size(48.dp),
-            border = androidx.compose.foundation.BorderStroke(2.dp, color)
+            color = color.copy(alpha = 0.15f),
+            shape = RoundedCornerShape(12.dp),
+            modifier = Modifier.size(56.dp),
+            border = BorderStroke(1.5.dp, color.copy(alpha = 0.4f))
         ) {
             Box(contentAlignment = Alignment.Center) {
-                Icon(icon, null, tint = color, modifier = Modifier.size(24.dp))
+                Icon(icon, null, tint = color, modifier = Modifier.size(28.dp))
             }
         }
-        Spacer(Modifier.height(4.dp))
+        Spacer(Modifier.height(6.dp))
         Text(
             text = label,
             style = MaterialTheme.typography.labelSmall,
-            fontWeight = FontWeight.Bold,
-            color = color
+            fontWeight = FontWeight.Black,
+            color = color,
+            letterSpacing = 0.5.sp
         )
     }
 }
@@ -392,11 +536,11 @@ fun ProfileExpandableSection(
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp),
+        shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(
-            containerColor = if (isExpanded) MaterialTheme.colorScheme.surface
-            else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-        )
+            containerColor = Color.White.copy(alpha = 0.1f)
+        ),
+        border = BorderStroke(0.5.dp, Color.White.copy(alpha = 0.15f))
     ) {
         Column {
             Row(
@@ -407,27 +551,28 @@ fun ProfileExpandableSection(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Surface(
-                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f),
+                    color = Color.White.copy(alpha = 0.1f),
                     shape = CircleShape,
-                    modifier = Modifier.size(40.dp)
+                    modifier = Modifier.size(44.dp),
+                    border = BorderStroke(0.5.dp, Color.White.copy(alpha = 0.2f))
                 ) {
                     Box(contentAlignment = Alignment.Center) {
-                        Icon(icon, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+                        Icon(icon, null, tint = Color.White, modifier = Modifier.size(20.dp))
                     }
                 }
                 Spacer(Modifier.width(16.dp))
                 Column(modifier = Modifier.weight(1f)) {
-                    Text(title, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
-                    Text(description, style = MaterialTheme.typography.labelSmall, color = Color.Gray)
+                    Text(title, fontWeight = FontWeight.ExtraBold, style = MaterialTheme.typography.titleMedium, color = Color.White)
+                    Text(description, style = MaterialTheme.typography.labelSmall, color = Color.White.copy(alpha = 0.5f))
                 }
                 Icon(
-                    imageVector = if (isExpanded) Icons.Default.Remove else Icons.Default.Add,
+                    imageVector = if (isExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
                     contentDescription = null,
-                    tint = Color.Gray
+                    tint = Color.White.copy(alpha = 0.6f)
                 )
             }
             if (isExpanded) {
-                Box(modifier = Modifier.padding(16.dp).padding(top = 0.dp)) {
+                Box(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp).padding(bottom = 12.dp)) {
                     content()
                 }
             }
@@ -451,29 +596,41 @@ fun HistoryListInProfile(history: List<AssessmentRecord>, dateFormat: SimpleDate
 @Composable
 fun HistoryCard(record: AssessmentRecord, dateFormat: SimpleDateFormat) {
     Card(
-        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+        modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.05f)),
+        border = BorderStroke(0.5.dp, Color.White.copy(alpha = 0.1f))
     ) {
         Column(modifier = Modifier.padding(12.dp)) {
             Text(
                 text = "Diagnostic du ${dateFormat.format(Date(record.date))}",
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.Bold
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.Bold,
+                color = Color.White
             )
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(12.dp))
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 record.scores.forEach { (id, score) ->
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text(id.take(3).uppercase(), style = MaterialTheme.typography.labelSmall)
-                        Text("%.1f".format(score), style = MaterialTheme.typography.bodySmall,
-                            fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                        Text(id.take(3).uppercase(), style = MaterialTheme.typography.labelSmall, color = Color.White.copy(alpha = 0.5f))
+                        Text("%.1f".format(score), style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Black, color = Color(0xFF00B4D8))
                     }
                 }
             }
             record.coachNote?.let {
-                Spacer(modifier = Modifier.height(8.dp))
-                Surface(color = MaterialTheme.colorScheme.tertiaryContainer.copy(0.3f), shape = RoundedCornerShape(4.dp)) {
-                    Text(it, modifier = Modifier.padding(8.dp), style = MaterialTheme.typography.bodySmall)
+                Spacer(modifier = Modifier.height(12.dp))
+                Surface(
+                    color = Color.White.copy(alpha = 0.03f), 
+                    shape = RoundedCornerShape(8.dp),
+                    border = BorderStroke(0.5.dp, Color.White.copy(alpha = 0.05f))
+                ) {
+                    Text(
+                        it, 
+                        modifier = Modifier.padding(8.dp), 
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color.White.copy(alpha = 0.8f)
+                    )
                 }
             }
         }

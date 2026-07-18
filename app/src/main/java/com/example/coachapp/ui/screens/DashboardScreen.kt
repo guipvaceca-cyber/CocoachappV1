@@ -1,10 +1,19 @@
 package com.example.coachapp.ui.screens
 
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -15,8 +24,10 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
@@ -27,6 +38,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
 import com.example.coachapp.R
+import com.example.coachapp.data.*
 import com.example.coachapp.data.SeasonConfig
 import com.example.coachapp.data.Team
 import com.example.coachapp.data.TrainingSession
@@ -42,10 +54,17 @@ fun DashboardScreen(
     flashResults: Map<String, Double>? = null,
     globalResults: Map<String, Double>? = null,
     seasonConfig: SeasonConfig = SeasonConfig(),
-    onNavigate: (String) -> Unit = {}
+    onNavigate: (String) -> Unit = {},
+    onUpdateAttendance: (String, String) -> Unit = { _, _ -> }
 ) {
     val now = LocalDateTime.now()
     val today = LocalDate.now()
+    
+    val clubEvents = remember(seasonConfig.clubEvents) {
+        seasonConfig.clubEvents.filter { !it.date.isBefore(today) }.sortedBy { it.date }
+    }
+
+    var selectedEventForAttendance by remember { mutableStateOf<ClubEvent?>(null) }
     
     val todaysTraining = remember(seasonConfig) {
         seasonConfig.plannedTrainings.find { it.date == today }
@@ -77,7 +96,8 @@ fun DashboardScreen(
     LazyColumn(
         modifier = modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
+            .background(Color(0xFF001529)) // Solid Deep Dark Blue
+            .statusBarsPadding()
     ) {
         item { HeaderSection() }
 
@@ -85,22 +105,37 @@ fun DashboardScreen(
             ContextualCard(state = contextState, session = todaysTraining, onNavigate = onNavigate)
         }
 
+        // --- CLUB EVENTS SECTION ---
+        if (clubEvents.isNotEmpty()) {
+            item {
+                SectionHeader(title = "ÉVÉNEMENTS CLUB")
+                androidx.compose.foundation.lazy.LazyRow(
+                    modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
+                    contentPadding = PaddingValues(horizontal = 16.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    items(clubEvents, key = { it.id }) { event ->
+                        val status = seasonConfig.clubEventRegistrations[event.id] ?: "pending"
+                        ClubEventCard(
+                            event = event, 
+                            status = status,
+                            onClick = { selectedEventForAttendance = event }
+                        )
+                    }
+                }
+            }
+        }
+
         // --- READY FOR FIELD SECTION (STACKED CAROUSEL) ---
         if (readySessionsByTeam.isNotEmpty()) {
             item {
-                Text(
-                    text = "PRÊT POUR LE TERRAIN",
-                    style = MaterialTheme.typography.labelLarge,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                    color = MaterialTheme.colorScheme.secondary
-                )
+                SectionHeader(title = "PRÊT POUR LE TERRAIN", color = Color.White.copy(alpha = 0.8f))
                 androidx.compose.foundation.lazy.LazyRow(
                     modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
                     contentPadding = PaddingValues(horizontal = 16.dp),
                     horizontalArrangement = Arrangement.spacedBy(24.dp) // Spacing for stack visuals
                 ) {
-                    items(readySessionsByTeam.toList()) { (teamId, sessions) ->
+                    items(readySessionsByTeam.toList(), key = { it.first }) { (teamId, sessions) ->
                         val team = seasonConfig.teams.find { it.id == teamId }
                         TeamSessionStack(team, sessions, onSessionClick = { onNavigate("COMPANION_${it.id}") })
                     }
@@ -112,8 +147,9 @@ fun DashboardScreen(
         item {
             Card(
                 modifier = Modifier.padding(16.dp).fillMaxWidth(),
-                shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                shape = RoundedCornerShape(24.dp),
+                colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.08f)),
+                border = BorderStroke(0.5.dp, Color.White.copy(alpha = 0.15f))
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
                     Row(
@@ -122,15 +158,15 @@ fun DashboardScreen(
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
                         Column {
-                            Text("ANALYSE DE COMPÉTENCES", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                            Text("ANALYSE DE COMPÉTENCES", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = Color.White)
                             if (!isAnalysisExpanded) {
-                                Text("Cliquez pour déployer le radar", style = MaterialTheme.typography.labelSmall, color = Color.Gray)
+                                Text("Cliquez pour déployer le radar", style = MaterialTheme.typography.labelSmall, color = Color.White.copy(alpha = 0.6f))
                             }
                         }
                         Icon(
                             imageVector = if (isAnalysisExpanded) Icons.Default.Remove else Icons.Default.Add,
                             contentDescription = if (isAnalysisExpanded) "Réduire" else "Déployer",
-                            tint = MaterialTheme.colorScheme.primary
+                            tint = Color.White
                         )
                     }
                     
@@ -138,9 +174,9 @@ fun DashboardScreen(
                         Spacer(modifier = Modifier.height(8.dp))
                         if (flashResults == null && globalResults == null) {
                             Text("Aucune donnée disponible. Réalisez votre premier diagnostic pour voir vos progrès.", 
-                                style = MaterialTheme.typography.bodySmall, color = Color.Gray, modifier = Modifier.padding(vertical = 16.dp))
+                                style = MaterialTheme.typography.bodySmall, color = Color.White.copy(alpha = 0.8f), modifier = Modifier.padding(vertical = 16.dp))
                         } else {
-                            Text("Session (Bleu) vs Global (Violet)", style = MaterialTheme.typography.labelSmall, color = Color.Gray)
+                            Text("Session (Bleu) vs Global (Violet)", style = MaterialTheme.typography.labelSmall, color = Color.White.copy(alpha = 0.7f))
                             Spacer(modifier = Modifier.height(16.dp))
                             Box(modifier = Modifier.fillMaxWidth().height(240.dp), contentAlignment = Alignment.Center) {
                                 RadarChart(flashScores = flashResults, globalScores = globalResults, modifier = Modifier.size(230.dp))
@@ -152,20 +188,43 @@ fun DashboardScreen(
         }
 
         item {
-            Text(
-                text = "PÔLES DE COMPÉTENCES",
-                style = MaterialTheme.typography.labelLarge,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                color = MaterialTheme.colorScheme.primary
-            )
+            SectionHeader(title = "PÔLES DE COMPÉTENCES")
         }
 
-        items(getMainPoles()) { item ->
-            ModuleRow(item, onClick = { onNavigate(item.id) })
+        // Grille de modules
+        item {
+            val modules = getMainPoles()
+            Column(modifier = Modifier.padding(horizontal = 16.dp)) {
+                modules.chunked(2).forEach { rowModules ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        rowModules.forEach { item ->
+                            ModuleCard(item, modifier = Modifier.weight(1f), onClick = { onNavigate(item.id) })
+                        }
+                        if (rowModules.size == 1) {
+                            Spacer(modifier = Modifier.weight(1f))
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(12.dp))
+                }
+            }
         }
 
         item { Spacer(modifier = Modifier.height(100.dp)) }
+    }
+
+    if (selectedEventForAttendance != null) {
+        ClubEventAttendanceSheet(
+            event = selectedEventForAttendance!!,
+            currentStatus = seasonConfig.clubEventRegistrations[selectedEventForAttendance!!.id] ?: "pending",
+            onStatusSelected = { status ->
+                onUpdateAttendance(selectedEventForAttendance!!.id, status)
+                selectedEventForAttendance = null
+            },
+            onDismiss = { selectedEventForAttendance = null }
+        )
     }
 }
 
@@ -184,12 +243,12 @@ fun TeamSessionStack(team: Team?, sessions: List<TrainingSession>, onSessionClic
         list
     }
 
-    Box(modifier = Modifier.width(180.dp).height(130.dp)) {
+    Box(modifier = Modifier.width(210.dp).height(150.dp)) {
         displaySessions.forEachIndexed { index, session ->
             val isTop = index == displaySessions.size - 1
-            // Offset for visual stacking effect
-            val xOffset = (index * 6).dp
-            val yOffset = (index * 4).dp
+            // Offset for visual stacking effect - Increased for better accessibility
+            val xOffset = (index * 12).dp
+            val yOffset = (index * 8).dp
             
             Box(
                 modifier = Modifier
@@ -235,21 +294,24 @@ fun TeamSessionStack(team: Team?, sessions: List<TrainingSession>, onSessionClic
 fun ReadySessionCard(session: TrainingSession, team: Team?, isFront: Boolean = false, onClick: () -> Unit) {
     Card(
         modifier = Modifier.width(160.dp).height(110.dp).clickable { onClick() },
-        shape = RoundedCornerShape(12.dp),
+        shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(
-            containerColor = if (isFront) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.secondaryContainer
+            containerColor = if (isFront) (team?.color ?: Color.Black) else Color.White.copy(alpha = 0.1f)
         ),
-        border = if (isFront) androidx.compose.foundation.BorderStroke(2.dp, MaterialTheme.colorScheme.primary) else null,
-        elevation = CardDefaults.cardElevation(defaultElevation = if (isFront) 8.dp else 1.dp)
+        border = BorderStroke(0.5.dp, if (isFront) Color.White.copy(alpha = 0.4f) else Color.White.copy(alpha = 0.2f)),
+        elevation = CardDefaults.cardElevation(defaultElevation = if (isFront) 8.dp else 0.dp)
     ) {
         Column(modifier = Modifier.padding(12.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-                Surface(modifier = Modifier.size(6.dp), shape = CircleShape, color = team?.color ?: Color(0xFF4CAF50)) {}
-                Spacer(Modifier.width(6.dp))
+                if (!isFront) {
+                    Surface(modifier = Modifier.size(6.dp), shape = CircleShape, color = team?.color ?: Color(0xFF4CAF50)) {}
+                    Spacer(Modifier.width(6.dp))
+                }
                 Text(
                     session.date.format(DateTimeFormatter.ofPattern("EEE d MMM", Locale.FRENCH)), 
                     style = MaterialTheme.typography.labelSmall, 
                     fontWeight = FontWeight.Bold,
+                    color = if (isFront) Color.White else Color.Black,
                     modifier = Modifier.weight(1f)
                 )
             }
@@ -261,21 +323,21 @@ fun ReadySessionCard(session: TrainingSession, team: Team?, isFront: Boolean = f
                 maxLines = 2, 
                 lineHeight = 16.sp,
                 overflow = TextOverflow.Ellipsis,
-                color = if (isFront) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSecondaryContainer
+                color = if (isFront) Color.White else Color.Black
             )
             
             Spacer(modifier = Modifier.weight(1f))
             
             if (isFront) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.End, modifier = Modifier.fillMaxWidth()) {
-                    Text("LANCER", fontSize = 9.sp, fontWeight = FontWeight.Black, color = MaterialTheme.colorScheme.primary)
-                    Icon(Icons.Default.PlayArrow, null, modifier = Modifier.size(14.dp), tint = MaterialTheme.colorScheme.primary)
+                    Text("LANCER", fontSize = 9.sp, fontWeight = FontWeight.Black, color = Color.White)
+                    Icon(Icons.Default.PlayArrow, null, modifier = Modifier.size(14.dp), tint = Color.White)
                 }
             } else {
                 Text(
                     team?.name ?: "Catégorie", 
                     style = MaterialTheme.typography.labelSmall, 
-                    color = Color.Gray,
+                    color = Color.Black.copy(alpha = 0.6f),
                     maxLines = 1
                 )
             }
@@ -287,124 +349,247 @@ enum class DashboardState { PREP, FIELD, DEBRIEF, ANALYSE }
 
 @Composable
 fun ContextualCard(state: DashboardState, session: TrainingSession?, onNavigate: (String) -> Unit) {
-    val cardColor = when(state) {
-        DashboardState.PREP -> MaterialTheme.colorScheme.primaryContainer
-        DashboardState.FIELD -> Color(0xFFF44336)
-        DashboardState.DEBRIEF -> Color(0xFF4CAF50)
-        DashboardState.ANALYSE -> MaterialTheme.colorScheme.surfaceVariant
+    val targetColor = when(state) {
+        DashboardState.PREP -> Color(0xFF003399).copy(alpha = 0.4f)
+        DashboardState.FIELD -> Color(0xFFD32F2F).copy(alpha = 0.4f)
+        DashboardState.DEBRIEF -> Color(0xFF388E3C).copy(alpha = 0.4f)
+        DashboardState.ANALYSE -> Color.White.copy(alpha = 0.08f)
     }
+    
+    val glowColor = when(state) {
+        DashboardState.PREP -> Color(0xFF2196F3).copy(alpha = 0.12f)
+        DashboardState.FIELD -> Color(0xFFFF5252).copy(alpha = 0.12f)
+        DashboardState.DEBRIEF -> Color(0xFF66BB6A).copy(alpha = 0.12f)
+        DashboardState.ANALYSE -> Color.White.copy(alpha = 0.05f)
+    }
+    
+    val animatedColor by animateColorAsState(
+        targetValue = targetColor,
+        animationSpec = tween(durationMillis = 600),
+        label = "ContextCardColor"
+    )
 
     Card(
         modifier = Modifier.padding(16.dp).fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = cardColor),
-        elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
+        shape = RoundedCornerShape(24.dp),
+        colors = CardDefaults.cardColors(containerColor = animatedColor),
+        border = BorderStroke(0.5.dp, Color.White.copy(alpha = 0.2f)),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(
-                    imageVector = when(state) {
-                        DashboardState.PREP -> Icons.Default.EditNote
-                        DashboardState.FIELD -> Icons.Default.Timer
-                        DashboardState.DEBRIEF -> Icons.Default.Mic
-                        DashboardState.ANALYSE -> Icons.Default.AutoGraph
-                    },
-                    contentDescription = null
-                )
-                Spacer(Modifier.width(8.dp))
-                Text(
-                    text = when(state) {
-                        DashboardState.PREP -> "PRÉPARATION"
-                        DashboardState.FIELD -> "SESSION EN COURS"
-                        DashboardState.DEBRIEF -> "DÉBRIEFING"
-                        DashboardState.ANALYSE -> "VOTRE SAISON"
-                    },
-                    style = MaterialTheme.typography.labelLarge,
-                    fontWeight = FontWeight.Black
-                )
-            }
+        Box {
+            // Inner Glow / Gradient
+            Box(
+                modifier = Modifier
+                    .matchParentSize()
+                    .background(
+                        Brush.radialGradient(
+                            colors = listOf(glowColor, Color.Transparent),
+                            center = androidx.compose.ui.geometry.Offset(0f, 0f),
+                            radius = 500f
+                        )
+                    )
+            )
             
-            Spacer(Modifier.height(12.dp))
-            
-            if (state == DashboardState.FIELD && session != null) {
-                Text(session.focusArea ?: "Général", fontWeight = FontWeight.Bold)
-                Spacer(Modifier.height(8.dp))
-                val summary = listOf("🤸 " + session.warmup, "🎯 " + session.drills, "👥 " + session.smallGroupSituations, "🎮 " + session.collectiveGame).filter { it.length > 5 }
-                if (summary.isNotEmpty()) {
-                    summary.take(2).forEach {
-                        Text(it, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    }
-                }
-                Spacer(Modifier.height(12.dp))
+            Column(modifier = Modifier.padding(20.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Default.Schedule, null, modifier = Modifier.size(16.dp))
-                    Spacer(Modifier.width(4.dp))
-                    Text("Fin prévue à : ${session.startTime.plusMinutes(session.durationMinutes.toLong())}", style = MaterialTheme.typography.labelSmall)
+                    Icon(
+                        imageVector = when(state) {
+                            DashboardState.PREP -> Icons.Default.EditNote
+                            DashboardState.FIELD -> Icons.Default.Timer
+                            DashboardState.DEBRIEF -> Icons.Default.Mic
+                            DashboardState.ANALYSE -> Icons.Default.AutoGraph
+                        },
+                        contentDescription = null,
+                        tint = Color.White
+                    )
+                    Spacer(Modifier.width(12.dp))
+                    Text(
+                        text = when(state) {
+                            DashboardState.PREP -> "PRÉPARATION"
+                            DashboardState.FIELD -> "SESSION EN COURS"
+                            DashboardState.DEBRIEF -> "DÉBRIEFING"
+                            DashboardState.ANALYSE -> "VOTRE SAISON"
+                        },
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.Black,
+                        color = Color.White,
+                        letterSpacing = 1.2.sp
+                    )
                 }
-            } else {
-                Text(
-                    text = when(state) {
-                        DashboardState.PREP -> "Finalisez la préparation de votre séance ${session?.focusArea ?: ""}."
-                        DashboardState.FIELD -> "Ouvrez vos outils de terrain (Chrono, Scoreur, Présences)."
-                        DashboardState.DEBRIEF -> "Séance terminée ! Enregistrez votre ressenti à chaud."
-                        DashboardState.ANALYSE -> "Consultez vos statistiques de progression et vos ressources."
+                
+                Spacer(Modifier.height(16.dp))
+                
+                if (state == DashboardState.FIELD && session != null) {
+                    Text(session.focusArea ?: "Général", fontWeight = FontWeight.Bold, color = Color.White, fontSize = 18.sp)
+                    Spacer(Modifier.height(8.dp))
+                    val summary = listOf("🤸 " + session.warmup, "🎯 " + session.drills, "👥 " + session.smallGroupSituations, "🎮 " + session.collectiveGame).filter { it.length > 5 }
+                    if (summary.isNotEmpty()) {
+                        summary.take(2).forEach {
+                            Text(it, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis, color = Color.White.copy(alpha = 0.9f))
+                        }
+                    }
+                    Spacer(Modifier.height(12.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.Schedule, null, modifier = Modifier.size(16.dp), tint = Color.White.copy(alpha = 0.7f))
+                        Spacer(Modifier.width(4.dp))
+                        Text("Fin prévue à : ${session.startTime.plusMinutes(session.durationMinutes.toLong())}", style = MaterialTheme.typography.labelSmall, color = Color.White.copy(alpha = 0.7f))
+                    }
+                } else {
+                    Text(
+                        text = when(state) {
+                            DashboardState.PREP -> "Finalisez la préparation de votre séance ${session?.focusArea ?: ""}."
+                            DashboardState.FIELD -> "Ouvrez vos outils de terrain (Chrono, Scoreur, Présences)."
+                            DashboardState.DEBRIEF -> "Séance terminée ! Enregistrez votre ressenti à chaud."
+                            DashboardState.ANALYSE -> "Consultez vos statistiques de progression et vos ressources."
+                        },
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White
+                    )
+                }
+                
+                Spacer(Modifier.height(20.dp))
+                
+                Button(
+                    onClick = {
+                        onNavigate(when(state) {
+                            DashboardState.PREP -> "PREPARER"
+                            DashboardState.FIELD -> "COMPANION" 
+                            DashboardState.DEBRIEF -> "DIAGNOSTIC_FLASH"
+                            DashboardState.ANALYSE -> "INSIGHTS"
+                        })
                     },
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold
-                )
-            }
-            
-            Spacer(Modifier.height(16.dp))
-            
-            Button(
-                onClick = {
-                    onNavigate(when(state) {
-                        DashboardState.PREP -> "PREPARER"
-                        DashboardState.FIELD -> "COMPANION" 
-                        DashboardState.DEBRIEF -> "DIAGNOSTIC_FLASH"
-                        DashboardState.ANALYSE -> "INSIGHTS"
-                    })
-                },
-                modifier = Modifier.fillMaxWidth(),
-                colors = ButtonDefaults.buttonColors(containerColor = Color.Black)
-            ) {
-                Text(
-                    text = when(state) {
-                        DashboardState.PREP -> "Préparer ma séance"
-                        DashboardState.FIELD -> "Lancer l'Entraînement"
-                        DashboardState.DEBRIEF -> "Mener l'évaluation"
-                        DashboardState.ANALYSE -> "Voir mes Analyses"
-                    },
-                    color = Color.White
-                )
+                    modifier = Modifier.fillMaxWidth().height(48.dp),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color.White, contentColor = Color.Black)
+                ) {
+                    Text(
+                        text = when(state) {
+                            DashboardState.PREP -> "Préparer ma séance"
+                            DashboardState.FIELD -> "Lancer l'Entraînement"
+                            DashboardState.DEBRIEF -> "Mener l'évaluation"
+                            DashboardState.ANALYSE -> "Voir mes Analyses"
+                        },
+                        fontWeight = FontWeight.Bold
+                    )
+                }
             }
         }
     }
 }
 
+enum class AppUpdateStatus { UP_TO_DATE, UPDATE_AVAILABLE }
+
 @Composable
 fun HeaderSection() {
-    Box(
-        modifier = Modifier.fillMaxWidth().height(140.dp).background(
-            brush = Brush.verticalGradient(colors = listOf(Color.Black, Color.Transparent))
-        )
-    ) {
-        Column(modifier = Modifier.fillMaxSize().padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
-            Surface(modifier = Modifier.fillMaxWidth().height(70.dp), color = Color.Black, shape = RoundedCornerShape(12.dp)) {
+    val updateStatus = AppUpdateStatus.UP_TO_DATE // Mock status
+
+    Column(modifier = Modifier.fillMaxWidth()) {
+        // Top Section: Comite Logo on Global Background
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(100.dp) 
+                .background(Color(0xFF001529)), // Same as global background
+            contentAlignment = Alignment.Center
+        ) {
+            Image(
+                painter = painterResource(id = R.drawable.comitda),
+                contentDescription = "Comité Logo",
+                modifier = Modifier.height(65.dp), // Reduced size by ~15%
+                contentScale = ContentScale.Fit
+            )
+        }
+
+        // Bottom Section: CoCoach Info
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp)
+        ) {
+            Surface(
+                modifier = Modifier.fillMaxWidth().height(80.dp),
+                color = Color.White.copy(alpha = 0.08f),
+                shape = RoundedCornerShape(20.dp),
+                border = BorderStroke(0.5.dp, Color.White.copy(alpha = 0.15f))
+            ) {
                 Row(
                     modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    Surface(modifier = Modifier.size(56.dp), shape = RoundedCornerShape(12.dp), color = Color.Transparent) {
-                        Image(painter = painterResource(id = R.drawable.ic_cocoach_logo), contentDescription = "Logo", modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Fit)
-                    }
-                    Column(horizontalAlignment = Alignment.End) {
-                        Row(verticalAlignment = Alignment.Bottom) {
-                            Text(text = "CoCoach", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Black, fontSize = 24.sp, letterSpacing = (-1).sp)
-                            Spacer(Modifier.width(4.dp))
-                            Text(text = "v0.4-RC", color = Color.Gray, fontSize = 10.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(bottom = 4.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Surface(
+                            modifier = Modifier.size(48.dp),
+                            shape = RoundedCornerShape(12.dp),
+                            color = Color.Transparent
+                        ) {
+                            Image(
+                                painter = painterResource(id = R.drawable.ic_cocoach_logo),
+                                contentDescription = "Logo",
+                                modifier = Modifier.fillMaxSize(),
+                                contentScale = ContentScale.Fit
+                            )
                         }
-                        Text(text = "FFvolley\nDrôme Ardèche", color = Color.White, textAlign = TextAlign.End, fontWeight = FontWeight.Bold, fontSize = 12.sp, lineHeight = 14.sp)
+                        Spacer(Modifier.width(12.dp))
+                        Column {
+                            Row(verticalAlignment = Alignment.Bottom) {
+                                Text(
+                                    text = "CoCoach",
+                                    color = Color.White,
+                                    fontWeight = FontWeight.Black,
+                                    fontSize = 22.sp,
+                                    letterSpacing = (-0.5).sp
+                                )
+                                Spacer(Modifier.width(6.dp))
+                                Text(
+                                    text = "v0.4-RC",
+                                    color = Color.White.copy(alpha = 0.6f),
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    modifier = Modifier.padding(bottom = 4.dp)
+                                )
+                                Spacer(Modifier.width(8.dp))
+                                // App Update Status
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier.padding(bottom = 4.dp)
+                                ) {
+                                    val (label, color, icon) = when (updateStatus) {
+                                        AppUpdateStatus.UP_TO_DATE -> Triple(
+                                            "À JOUR",
+                                            Color(0xFF2196F3), // Blue
+                                            Icons.Default.Verified
+                                        )
+                                        AppUpdateStatus.UPDATE_AVAILABLE -> Triple(
+                                            "MAJ DISPO",
+                                            Color(0xFFFF9800), // Orange
+                                            Icons.Default.ArrowCircleUp
+                                        )
+                                    }
+                                    
+                                    Icon(
+                                        imageVector = icon,
+                                        contentDescription = null,
+                                        tint = color,
+                                        modifier = Modifier.size(12.dp)
+                                    )
+                                    Spacer(Modifier.width(4.dp))
+                                    Text(
+                                        text = label,
+                                        color = color,
+                                        fontSize = 8.sp,
+                                        fontWeight = FontWeight.Black
+                                    )
+                                }
+                            }
+                            Text(
+                                text = "Drôme Ardèche Volley Connect",
+                                color = Color(0xFF00B4D8),
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 11.sp
+                            )
+                        }
                     }
                 }
             }
@@ -424,25 +609,283 @@ fun getMainPoles() = listOf(
 )
 
 @Composable
-fun ModuleRow(item: ModuleItem, onClick: () -> Unit) {
+fun ModuleCard(item: ModuleItem, modifier: Modifier = Modifier, onClick: () -> Unit) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val isPressed by interactionSource.collectIsPressedAsState()
+    
+    val scale by animateFloatAsState(
+        targetValue = if (isPressed) 0.96f else 1f,
+        animationSpec = tween(100),
+        label = "ModuleScale"
+    )
+
     Card(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp).clickable { onClick() },
-        shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+        modifier = modifier
+            .height(110.dp)
+            .graphicsLayer(scaleX = scale, scaleY = scale)
+            .clickable(
+                interactionSource = interactionSource,
+                indication = ripple(color = item.color),
+                onClick = onClick
+            ),
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.08f)),
+        border = BorderStroke(0.5.dp, Color.White.copy(alpha = 0.15f))
     ) {
-        Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-            Surface(color = item.color.copy(alpha = 0.1f), shape = CircleShape, modifier = Modifier.size(48.dp)) {
-                Box(contentAlignment = Alignment.Center) {
-                    Icon(imageVector = item.icon, contentDescription = null, tint = item.color, modifier = Modifier.size(24.dp))
+        Column(
+            modifier = Modifier.padding(12.dp).fillMaxSize(),
+            verticalArrangement = Arrangement.Center,
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Box(contentAlignment = Alignment.Center) {
+                // Aura behind icon
+                Box(
+                    modifier = Modifier
+                        .size(48.dp)
+                        .background(
+                            Brush.radialGradient(
+                                colors = listOf(item.color.copy(alpha = 0.15f), Color.Transparent)
+                            ),
+                            shape = CircleShape
+                        )
+                )
+                
+                Surface(
+                    color = item.color.copy(alpha = 0.15f),
+                    shape = CircleShape,
+                    modifier = Modifier.size(40.dp),
+                    border = BorderStroke(1.dp, item.color.copy(alpha = 0.3f))
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            imageVector = item.icon,
+                            contentDescription = null,
+                            tint = item.color,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
                 }
             }
-            Spacer(modifier = Modifier.width(16.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Text(text = item.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                Text(text = item.description, style = MaterialTheme.typography.bodySmall, color = Color.Gray, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Spacer(modifier = Modifier.height(10.dp))
+            Text(
+                text = item.title,
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.Bold,
+                color = Color.White,
+                textAlign = TextAlign.Center,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+    }
+}
+
+@Composable
+fun SectionHeader(title: String, color: Color = Color(0xFF00B4D8)) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)
+    ) {
+        Box(
+            modifier = Modifier
+                .width(4.dp)
+                .height(16.dp)
+                .background(color, RoundedCornerShape(2.dp))
+        )
+        Spacer(Modifier.width(8.dp))
+        Text(
+            text = title,
+            style = MaterialTheme.typography.labelLarge,
+            fontWeight = FontWeight.Black,
+            color = color,
+            letterSpacing = 1.sp
+        )
+    }
+}
+
+@Composable
+fun ClubEventCard(event: ClubEvent, status: String, onClick: () -> Unit) {
+    Card(
+        modifier = Modifier.width(220.dp).height(100.dp).clickable { onClick() },
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.08f)),
+        border = BorderStroke(0.5.dp, Color.White.copy(alpha = 0.15f))
+    ) {
+        Column(modifier = Modifier.padding(12.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Surface(
+                    color = when(event.type) {
+                        ClubEventType.TOURNOI -> Color(0xFFFF9800)
+                        ClubEventType.SOIRÉE -> Color(0xFFE91E63)
+                        ClubEventType.RÉUNION -> Color(0xFF2196F3)
+                    },
+                    shape = CircleShape,
+                    modifier = Modifier.size(8.dp)
+                ) {}
+                Spacer(Modifier.width(8.dp))
+                Text(event.type.name, style = MaterialTheme.typography.labelSmall, color = Color.White.copy(alpha = 0.6f), fontWeight = FontWeight.Bold)
+                
+                Spacer(Modifier.weight(1f))
+                
+                // Status Badge
+                Surface(
+                    color = when(status) {
+                        "present" -> Color(0xFF4CAF50).copy(alpha = 0.2f)
+                        "absent" -> Color(0xFFE91E63).copy(alpha = 0.2f)
+                        else -> Color.White.copy(alpha = 0.1f)
+                    },
+                    shape = RoundedCornerShape(4.dp),
+                    border = BorderStroke(0.5.dp, when(status) {
+                        "present" -> Color(0xFF4CAF50)
+                        "absent" -> Color(0xFFE91E63)
+                        else -> Color.White.copy(alpha = 0.3f)
+                    })
+                ) {
+                    Text(
+                        text = when(status) {
+                            "present" -> "PRÉSENT"
+                            "absent" -> "ABSENT"
+                            else -> "ATTENTE"
+                        },
+                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                        style = MaterialTheme.typography.labelSmall,
+                        fontSize = 8.sp,
+                        fontWeight = FontWeight.Black,
+                        color = when(status) {
+                            "present" -> Color(0xFF4CAF50)
+                            "absent" -> Color(0xFFE91E63)
+                            else -> Color.White.copy(alpha = 0.6f)
+                        }
+                    )
+                }
             }
-            Icon(imageVector = Icons.AutoMirrored.Filled.ArrowForwardIos, contentDescription = null, tint = Color.LightGray, modifier = Modifier.size(16.dp))
+            Spacer(Modifier.height(4.dp))
+            Text(event.title, style = MaterialTheme.typography.bodyMedium, color = Color.White, fontWeight = FontWeight.ExtraBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Spacer(modifier = Modifier.weight(1f))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Default.Place, null, modifier = Modifier.size(10.dp), tint = Color.White.copy(alpha = 0.5f))
+                Spacer(Modifier.width(4.dp))
+                Text(event.location, style = MaterialTheme.typography.labelSmall, color = Color.White.copy(alpha = 0.5f), maxLines = 1)
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun ClubEventAttendanceSheet(
+    event: ClubEvent,
+    currentStatus: String,
+    onStatusSelected: (String) -> Unit,
+    onDismiss: () -> Unit
+) {
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        containerColor = Color(0xFF001529),
+        contentColor = Color.White,
+        dragHandle = { BottomSheetDefaults.DragHandle(color = Color.White.copy(alpha = 0.3f)) }
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(24.dp)
+                .padding(bottom = 32.dp)
+        ) {
+            Text(
+                text = event.title,
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.Black,
+                color = Color.White
+            )
+            Text(
+                text = "${event.date.format(DateTimeFormatter.ofPattern("EEEE d MMMM", Locale.FRENCH))} à ${event.startTime}",
+                style = MaterialTheme.typography.bodyMedium,
+                color = Color(0xFF00B4D8)
+            )
+            
+            Spacer(modifier = Modifier.height(24.dp))
+            
+            Text(
+                text = "Votre participation :",
+                style = MaterialTheme.typography.labelLarge,
+                color = Color.White.copy(alpha = 0.7f),
+                fontWeight = FontWeight.Bold
+            )
+            
+            Spacer(modifier = Modifier.height(16.dp))
+            
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                AttendanceOption(
+                    label = "PRÉSENT",
+                    icon = Icons.Default.CheckCircle,
+                    color = Color(0xFF4CAF50),
+                    isSelected = currentStatus == "present",
+                    modifier = Modifier.weight(1f),
+                    onClick = { onStatusSelected("present") }
+                )
+                AttendanceOption(
+                    label = "ABSENT",
+                    icon = Icons.Default.Cancel,
+                    color = Color(0xFFE91E63),
+                    isSelected = currentStatus == "absent",
+                    modifier = Modifier.weight(1f),
+                    onClick = { onStatusSelected("absent") }
+                )
+            }
+            
+            Spacer(modifier = Modifier.height(16.dp))
+            
+            TextButton(
+                onClick = onDismiss,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("Plus tard", color = Color.White.copy(alpha = 0.5f))
+            }
+        }
+    }
+}
+
+@Composable
+fun AttendanceOption(
+    label: String,
+    icon: ImageVector,
+    color: Color,
+    isSelected: Boolean,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit
+) {
+    Surface(
+        modifier = modifier
+            .height(80.dp)
+            .clickable { onClick() },
+        shape = RoundedCornerShape(16.dp),
+        color = if (isSelected) color.copy(alpha = 0.2f) else Color.White.copy(alpha = 0.05f),
+        border = BorderStroke(
+            width = if (isSelected) 2.dp else 1.dp,
+            color = if (isSelected) color else Color.White.copy(alpha = 0.1f)
+        )
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center,
+            modifier = Modifier.fillMaxSize()
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = if (isSelected) color else Color.White.copy(alpha = 0.4f),
+                modifier = Modifier.size(28.dp)
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.Black,
+                color = if (isSelected) color else Color.White.copy(alpha = 0.6f)
+            )
         }
     }
 }

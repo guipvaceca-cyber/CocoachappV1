@@ -99,7 +99,7 @@ fun LockerRoomScreen(
                 }
 
                 LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    items(filteredPosts) { post ->
+                    items(filteredPosts, key = { it.id }) { post ->
                         PostCard(
                             post = post, 
                             userRole = userRole,
@@ -272,7 +272,7 @@ fun ThreadView(
                     Text("Aucun conseil pour le moment. Soyez le premier à aider ce coach !", style = MaterialTheme.typography.bodySmall, color = Color.Gray, modifier = Modifier.padding(16.dp))
                 }
             } else {
-                items(post.comments) { comment ->
+                items(post.comments, key = { it.timestamp }) { comment ->
                     CommentCard(comment)
                 }
             }

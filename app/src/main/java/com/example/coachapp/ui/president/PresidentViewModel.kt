@@ -19,6 +19,8 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.longOrNull
 
 class PresidentViewModel(
     private val repository: PresidentRepository
@@ -39,6 +41,9 @@ class PresidentViewModel(
     private val _clubPlanning = MutableStateFlow<List<com.example.coachapp.data.TrainingSchedule>>(emptyList())
     val clubPlanning: StateFlow<List<com.example.coachapp.data.TrainingSchedule>> = _clubPlanning.asStateFlow()
 
+    private val _clubEvents = MutableStateFlow<List<com.example.coachapp.data.ClubEvent>>(emptyList())
+    val clubEvents: StateFlow<List<com.example.coachapp.data.ClubEvent>> = _clubEvents.asStateFlow()
+
     var selectedSeason by mutableStateOf("2026-2027")
         private set
 
@@ -52,7 +57,8 @@ class PresidentViewModel(
     private var ordresCategorie: Map<String, Int> = emptyMap()
 
     init {
-        chargerCollectifs()
+        // Le chargement automatique est supprimé. 
+        // Il doit être déclenché manuellement lors de l'accès à l'espace Admin.
     }
 
     fun updateSeason(newSeason: String) {
@@ -66,52 +72,60 @@ class PresidentViewModel(
             _uiState.value = PresidentUiState.Loading
             try {
                 val id = repository.getClubId()
-                android.util.Log.d("DIAG_PRESIDENT", "Club ID récupéré: $id")
                 if (id == null) {
                     _uiState.value = PresidentUiState.Error("Aucun club associé à votre compte")
                     return@launch
                 }
                 clubId = id
                 clubCode = repository.getClubCode(id)
-                android.util.Log.d("DIAG_PRESIDENT", "Club Code récupéré: $clubCode")
-
-                // Charger le planning global du club
-                _clubPlanning.value = repository.getClubPlanning(id, selectedSeason)
 
                 val collectifs = repository.getCollectifsAvecDetail(id, selectedSeason)
-                android.util.Log.d("DIAG_PRESIDENT", "Nombre de collectifs: ${collectifs.size}")
-
                 _uiState.value = PresidentUiState.Success(
                     collectifs = collectifs,
                     collectifsEnAttente = collectifs.filter {
                         it.collectif.statut == CollectifStatut.EN_ATTENTE_CT
                     }
                 )
+                chargerClubEvents()
             } catch (e: Exception) {
-                android.util.Log.e("DIAG_PRESIDENT", "Erreur chargerCollectifs", e)
                 _uiState.value = PresidentUiState.Error(e.message ?: "Erreur")
             }
         }
     }
 
+    fun chargerClubEvents() {
+        val id = clubId ?: return
+        viewModelScope.launch {
+            _clubEvents.value = repository.getClubEvents(id)
+        }
+    }
+
+    fun pushClubEvent(
+        event: com.example.coachapp.data.ClubEvent,
+        onSuccess: () -> Unit,
+        onError: (String) -> Unit
+    ) {
+        val id = clubId ?: return onError("ID Club introuvable. Veuillez rafraîchir.")
+        viewModelScope.launch {
+            repository.pushClubEvent(event.copy(clubId = id))
+                .onSuccess { 
+                    chargerClubEvents()
+                    onSuccess() 
+                }
+                .onFailure { onError(it.message ?: "Erreur push événement") }
+        }
+    }
+
     fun chargerCollectifDetail(collectifId: String, format: String, codeFourni: String) {
-        android.util.Log.d("DIAG_PRESIDENT", "chargerCollectifDetail appelé: collectifId=$collectifId clubCode=$clubCode")
         collectifCourantId = collectifId
         viewModelScope.launch {
             try {
                 _formatLimite.value = repository.getFormatLimite(format)
                 chargerJoueurs(collectifId)
-
-                // S'assurer que le clubCode local est synchronisé
-                if (clubCode == null) clubCode = codeFourni
-
                 if (vivierClubCache.isEmpty()) {
+                    // Utilisation directe du code club fourni et de la saison active
                     vivierClubCache = repository.chargerVivierClub(codeFourni, selectedSeason)
-                    android.util.Log.d("DIAG_PRESIDENT", "Cache vivier: ${vivierClubCache.size} joueurs")
-                }
-                if (ordresCategorie.isEmpty()) {
                     ordresCategorie = repository.getTousLesOrdresCategorie()
-                    android.util.Log.d("DIAG_PRESIDENT", "Ordres catégorie: $ordresCategorie")
                 }
             } catch (e: Exception) {
                 android.util.Log.e("PRESIDENT_VM", "Erreur chargerCollectifDetail", e)
@@ -119,166 +133,68 @@ class PresidentViewModel(
         }
     }
 
-    private fun chargerJoueurs(collectifId: String) {
+    fun chargerJoueurs(collectifId: String) {
         viewModelScope.launch {
             _joueurs.value = repository.getJoueursCollectif(collectifId)
         }
     }
 
-    fun rechercherVivier(query: String, collectifId: String, categorieCollectif: String, sexeCollectif :String) {
-        android.util.Log.d("DIAG_PRESIDENT", "Recherche locale: '$query' | Cat: $categorieCollectif | Cache: ${vivierClubCache.size}")
+    fun rechercherDansVivier(query: String) {
         if (query.length < 2) {
             _vivierRecherche.value = emptyList()
             return
         }
-
-        viewModelScope.launch {
-            android.util.Log.d("DIAG_PRESIDENT", "Dans la coroutine, cache=${vivierClubCache.size}")
-            try {
-                val ordreCoach = ordresCategorie[categorieCollectif] ?: repository.getCategorieOrdre(categorieCollectif)
-                val dejaDans = _joueurs.value.mapNotNull { it.vivierJoueurId?.toString() }
-                val queryLower = query.lowercase()
-
-                val results = vivierClubCache
-                    .filter { row ->
-                        val id = row["id"]?.jsonPrimitive?.content ?: ""
-                        if (id in dejaDans) return@filter false
-
-                        val nom = row["nom"]?.jsonPrimitive?.content?.lowercase() ?: ""
-                        val prenom = row["prenom"]?.jsonPrimitive?.content?.lowercase() ?: ""
-                        if (!nom.contains(queryLower) && !prenom.contains(queryLower)) return@filter false
-
-                        // Normalisation du sexe (Base: Masc/Fem vs App: M/F)
-                        val sexeJoueurRaw = row["sexe"]?.jsonPrimitive?.content ?: "INCONNU"
-                        val sexeJoueur = when(sexeJoueurRaw) {
-                            "Masc" -> "M"
-                            "Fem" -> "F"
-                            else -> sexeJoueurRaw
-                        }
-
-                        if (sexeJoueur != "INCONNU" && sexeJoueur != sexeCollectif) return@filter false
-
-                        val categorieJoueur = row["categorie"]?.jsonPrimitive?.content ?: ""
-                        val ordreJoueur = ordresCategorie[categorieJoueur] ?: 99
-                        val surclass = row["niveau_surclassement"]?.jsonPrimitive?.content
-
-                        when {
-                            ordreJoueur == ordreCoach -> true
-                            ordreJoueur == ordreCoach - 1 -> true
-                            ordreJoueur == ordreCoach - 2 -> surclass in listOf("DS", "TS")
-                            ordreJoueur == ordreCoach - 3 -> surclass == "TS"
-                            else -> false
-                        }
-                    }
-                    .map { row ->
-                        val categorieJoueur = row["categorie"]?.jsonPrimitive?.content ?: ""
-                        val ordreJoueur = ordresCategorie[categorieJoueur] ?: ordreCoach
-                        JoueurVivier(
-                            id = row["id"]?.jsonPrimitive?.content?.toLongOrNull() ?: 0L,
-                            nom = row["nom"]?.jsonPrimitive?.content ?: "",
-                            prenom = row["prenom"]?.jsonPrimitive?.content ?: "",
-                            categorie = categorieJoueur,
-                            dateNaissance = row["date_naissance"]?.jsonPrimitive?.content,
-                            niveauSurclassement = row["niveau_surclassement"]?.jsonPrimitive?.content,
-                            groupeAffichage = ordreCoach - ordreJoueur
-                        )
-                    }
-                    .sortedWith(compareBy({ it.groupeAffichage }, { it.nom }, { it.prenom }))
-
-                android.util.Log.d("DIAG_PRESIDENT", "Résultats filtrés: ${results.size}")
-                _vivierRecherche.value = results
-            } catch (e: Exception) {
-                android.util.Log.e("PRESIDENT_VM", "Erreur recherche vivier", e)
-                android.util.Log.e("DIAG_PRESIDENT", "Erreur filtre: ${e.message}", e)
-            }
+        val resultats = vivierClubCache.filter {
+            val nom = it["nom"]?.jsonPrimitive?.contentOrNull ?: ""
+            val prenom = it["prenom"]?.jsonPrimitive?.contentOrNull ?: ""
+            nom.contains(query, ignoreCase = true) || prenom.contains(query, ignoreCase = true)
+        }.map { row ->
+            val cat = row["categorie"]?.jsonPrimitive?.contentOrNull ?: "M15"
+            val ordre = ordresCategorie[cat] ?: 99
+            JoueurVivier(
+                id = row["id"]?.jsonPrimitive?.longOrNull ?: 0L,
+                nom = row["nom"]?.jsonPrimitive?.contentOrNull ?: "",
+                prenom = row["prenom"]?.jsonPrimitive?.contentOrNull ?: "",
+                categorie = cat,
+                dateNaissance = row["date_naissance"]?.jsonPrimitive?.contentOrNull ?: "",
+                niveauSurclassement = row["niveau_surclassement"]?.jsonPrimitive?.contentOrNull,
+                groupeAffichage = 0 // Par défaut catégorie propre
+            )
         }
+        _vivierRecherche.value = resultats
     }
 
-    fun creerCollectif(
-        nom: String,
-        categorie: String,
-        sexe: String,
-        format: String,
-        competition: String,
-        saison: String,
-        onSuccess: () -> Unit,
-        onError: (String) -> Unit
-    ) {
-        viewModelScope.launch {
-            val id = clubId ?: return@launch onError("Club non identifié")
-            repository.creerCollectif(id, nom, categorie, sexe, format, competition, saison)
-                .onSuccess { chargerCollectifs(); onSuccess() }
-                .onFailure { onError(it.message ?: "Erreur création") }
-        }
-    }
-
-    fun envoyerInvitation(
-        collectifId: String,
-        email: String?,
-        telephone: String?,
-        poste: Poste,
-        onSuccess: () -> Unit,
-        onError: (String) -> Unit
-    ) {
-        viewModelScope.launch {
-            repository.envoyerInvitation(collectifId, email, telephone, poste)
-                .onSuccess { chargerCollectifs(); onSuccess() }
-                .onFailure { onError(it.message ?: "Erreur invitation") }
-        }
-    }
-
-    fun supprimerCollectif(
-        collectifId: String,
-        onSuccess: () -> Unit,
-        onError: (String) -> Unit
-    ) {
-        viewModelScope.launch {
-            repository.supprimerCollectif(collectifId)
-                .onSuccess { chargerCollectifs(); onSuccess() }
-                .onFailure { onError(it.message ?: "Erreur suppression") }
-        }
-    }
-
-    fun rattacherSoiMeme(
-        collectifId: String,
-        poste: Poste,
-        onSuccess: () -> Unit,
-        onError: (String) -> Unit
-    ) {
-        viewModelScope.launch {
-            repository.rattacherSoiMeme(collectifId, poste, selectedSeason)
-                .onSuccess { chargerCollectifs(); onSuccess() }
-                .onFailure { onError(it.message ?: "Erreur auto-rattachement") }
-        }
+    fun rechercherVivier(query: String, collectifId: String, categorie: String, sexe: String) {
+        rechercherDansVivier(query)
     }
 
     fun ajouterJoueur(
         collectifId: String,
         joueurId: Long,
         poste: String?,
-        onSuccess: () -> Unit,
-        onError: (String) -> Unit
+        onSuccess: () -> Unit = {},
+        onError: (String) -> Unit = {}
     ) {
         viewModelScope.launch {
-            repository.ajouterJoueurCollectif(collectifId, joueurId, poste, selectedSeason)
+            val id = clubCode ?: return@launch onError("Code club manquant")
+            repository.ajouterJoueurCollectif(collectifId, joueurId, poste, id)
                 .onSuccess {
                     chargerJoueurs(collectifId)
-                    _vivierRecherche.value = emptyList()
                     onSuccess()
                 }
-                .onFailure { onError(it.message ?: "Erreur ajout joueur") }
+                .onFailure { onError(it.message ?: "Erreur ajout") }
         }
     }
 
     fun retirerJoueur(
-        collectifJoueurId: String,
         collectifId: String,
-        onError: (String) -> Unit
+        collectifJoueurId: String,
+        onError: (String) -> Unit = {}
     ) {
         viewModelScope.launch {
             repository.retirerJoueurCollectif(collectifJoueurId)
                 .onSuccess { chargerJoueurs(collectifId) }
-                .onFailure { onError(it.message ?: "Erreur retrait joueur") }
+                .onFailure { onError(it.message ?: "Erreur suppression") }
         }
     }
 
@@ -286,18 +202,26 @@ class PresidentViewModel(
         collectifId: String,
         nom: String,
         prenom: String,
-        numLicence: String?,
         dateNaissance: String?,
+        numLicence: String?,
         categorie: String,
-        onSuccess: () -> Unit,
-        onError: (String) -> Unit
+        onSuccess: () -> Unit = {},
+        onError: (String) -> Unit = {}
     ) {
         viewModelScope.launch {
             repository.ajouterJoueurManuel(
-                collectifId, nom, prenom, numLicence,
-                dateNaissance, categorie, selectedSeason
+                collectifId = collectifId,
+                nom = nom,
+                prenom = prenom,
+                numLicence = numLicence,
+                dateNaissance = dateNaissance,
+                categorie = categorie,
+                saison = selectedSeason
             )
-                .onSuccess { chargerJoueurs(collectifId); onSuccess() }
+                .onSuccess {
+                    chargerJoueurs(collectifId)
+                    onSuccess()
+                }
                 .onFailure { onError(it.message ?: "Erreur ajout manuel") }
         }
     }
@@ -326,63 +250,6 @@ class PresidentViewModel(
         }
     }
 
-    fun enregistrerPlanning(
-        schedule: com.example.coachapp.data.TrainingSchedule,
-        onSuccess: () -> Unit,
-        onError: (String) -> Unit
-    ) {
-        viewModelScope.launch {
-            val id = clubId ?: return@launch onError("Club non identifié")
-            repository.upsertPlanning(schedule.copy(clubId = id))
-                .onSuccess { 
-                    chargerCollectifs() // Rafraîchit le planning global
-                    onSuccess() 
-                }
-                .onFailure { onError(it.message ?: "Erreur planning") }
-        }
-    }
-
-    fun supprimerPlanning(
-        scheduleId: String,
-        onSuccess: () -> Unit,
-        onError: (String) -> Unit
-    ) {
-        viewModelScope.launch {
-            repository.supprimerPlanning(scheduleId)
-                .onSuccess { 
-                    chargerCollectifs()
-                    onSuccess() 
-                }
-                .onFailure { onError(it.message ?: "Erreur suppression") }
-        }
-    }
-
-    fun pushSession(
-        session: com.example.coachapp.data.TrainingSession,
-        onSuccess: () -> Unit,
-        onError: (String) -> Unit
-    ) {
-        viewModelScope.launch {
-            val id = clubId ?: return@launch onError("Club non identifié")
-            repository.pushSession(session, id, selectedSeason)
-                .onSuccess { onSuccess() }
-                .onFailure { onError(it.message ?: "Erreur push séance") }
-        }
-    }
-
-    fun pushMatch(
-        event: com.example.coachapp.data.CompetitionEvent,
-        onSuccess: () -> Unit,
-        onError: (String) -> Unit
-    ) {
-        viewModelScope.launch {
-            val id = clubId ?: return@launch onError("Club non identifié")
-            repository.pushMatch(event, id, selectedSeason)
-                .onSuccess { onSuccess() }
-                .onFailure { onError(it.message ?: "Erreur push match") }
-        }
-    }
-
     fun refuserEffectif(
         collectifId: String,
         onSuccess: () -> Unit,
@@ -395,10 +262,61 @@ class PresidentViewModel(
         }
     }
 
-    fun syncPresencesForSession(sessionId: String, onResult: (Map<Long, String>) -> Unit) {
+    fun creerCollectif(
+        nom: String,
+        cat: String,
+        sexe: String,
+        format: String,
+        comp: String,
+        saison: String,
+        onSuccess: () -> Unit,
+        onError: (String) -> Unit
+    ) {
         viewModelScope.launch {
-            val presences = repository.fetchSessionPresences(sessionId)
-            onResult(presences)
+            val id = clubId ?: repository.getClubId() ?: return@launch onError("ID Club introuvable")
+            repository.creerCollectif(id, nom, cat, sexe, format, comp, saison)
+                .onSuccess { chargerCollectifs(); onSuccess() }
+                .onFailure { onError(it.message ?: "Erreur création") }
+        }
+    }
+
+    fun supprimerCollectif(
+        collectifId: String,
+        onSuccess: () -> Unit,
+        onError: (String) -> Unit
+    ) {
+        viewModelScope.launch {
+            repository.supprimerCollectif(collectifId)
+                .onSuccess { chargerCollectifs(); onSuccess() }
+                .onFailure { onError(it.message ?: "Erreur suppression") }
+        }
+    }
+
+    fun envoyerInvitation(
+        collectifId: String,
+        email: String?,
+        tel: String?,
+        poste: Poste,
+        onSuccess: () -> Unit,
+        onError: (String) -> Unit
+    ) {
+        viewModelScope.launch {
+            repository.envoyerInvitation(collectifId, email, tel, poste)
+                .onSuccess { chargerCollectifs(); onSuccess() }
+                .onFailure { onError(it.message ?: "Erreur invitation") }
+        }
+    }
+
+    fun rattacherSoiMeme(
+        collectifId: String,
+        poste: Poste,
+        onSuccess: () -> Unit,
+        onError: (String) -> Unit
+    ) {
+        viewModelScope.launch {
+            repository.rattacherSoiMeme(collectifId, poste, selectedSeason)
+                .onSuccess { chargerCollectifs(); onSuccess() }
+                .onFailure { onError(it.message ?: "Erreur rattachement") }
         }
     }
 }

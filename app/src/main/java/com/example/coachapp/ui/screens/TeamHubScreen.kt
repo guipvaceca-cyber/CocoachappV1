@@ -1,5 +1,6 @@
 package com.example.coachapp.ui.screens
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -15,6 +16,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -24,6 +26,7 @@ import com.example.coachapp.data.SeasonConfig
 import com.example.coachapp.data.TrainingSchedule
 import com.example.coachapp.data.model.Collectif
 import com.example.coachapp.ui.president.PresidentViewModel
+import com.example.coachapp.ui.training.TrainingViewModel
 import com.example.coachapp.ui.president.PresidentUiState
 import kotlinx.coroutines.launch
 import java.time.DayOfWeek
@@ -36,11 +39,17 @@ import java.util.*
 fun TeamHubScreen(
     modifier: Modifier = Modifier,
     viewModel: PresidentViewModel,
+    trainingViewModel: TrainingViewModel,
     seasonConfig: SeasonConfig,
     onUpdateConfig: (SeasonConfig) -> Unit
 ) {
     val uiState by viewModel.uiState.collectAsState()
-    val clubPlanning by viewModel.clubPlanning.collectAsState()
+    
+    LaunchedEffect(Unit) {
+        viewModel.chargerCollectifs()
+        trainingViewModel.chargerInfosClub() // Explicitly refresh planning data
+    }
+    val clubPlanning by trainingViewModel.clubPlanning.collectAsState()
     var selectedCollectifForEffectif by remember { mutableStateOf<Collectif?>(null) }
     var selectedCollectifForSchedule by remember { mutableStateOf<Collectif?>(null) }
     val scope = rememberCoroutineScope()
@@ -65,18 +74,28 @@ fun TeamHubScreen(
     } else {
         Scaffold(
             modifier = modifier.fillMaxSize(),
-            snackbarHost = { SnackbarHost(snackbarHostState) }
+            snackbarHost = { SnackbarHost(snackbarHostState) },
+            containerColor = Color(0xFF001529) // Deep Dark Blue Background
         ) { padding ->
             Column(modifier = Modifier.padding(padding).padding(16.dp)) {
-                Text("Mes Collectifs", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Black)
-                Text("Gérez les effectifs et plannings de vos équipes.", style = MaterialTheme.typography.bodyMedium, color = Color.Gray)
+                Text(
+                    text = "Mes Collectifs",
+                    style = MaterialTheme.typography.headlineMedium,
+                    fontWeight = FontWeight.Black,
+                    color = Color.White
+                )
+                Text(
+                    text = "Gérez les effectifs et plannings de vos équipes.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = Color.White.copy(alpha = 0.6f)
+                )
                 
                 Spacer(modifier = Modifier.height(24.dp))
 
                 when (val state = uiState) {
                     is PresidentUiState.Loading -> {
                         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                            CircularProgressIndicator()
+                            CircularProgressIndicator(color = Color(0xFF00B4D8))
                         }
                     }
                     is PresidentUiState.Error -> {
@@ -91,30 +110,29 @@ fun TeamHubScreen(
                         if (mesCollectifs.isEmpty()) {
                             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                    Icon(Icons.Default.Groups, null, modifier = Modifier.size(64.dp), tint = Color.LightGray)
+                                    Icon(Icons.Default.Groups, null, modifier = Modifier.size(64.dp), tint = Color.White.copy(alpha = 0.2f))
                                     Spacer(Modifier.height(16.dp))
-                                    Text("Aucun collectif rattaché.", style = MaterialTheme.typography.titleMedium)
+                                    Text("Aucun collectif rattaché.", style = MaterialTheme.typography.titleMedium, color = Color.White)
                                     Text("Demandez à votre président ou rattachiez-vous depuis le Hub Président.", 
                                         textAlign = TextAlign.Center, 
-                                        color = Color.Gray,
+                                        color = Color.White.copy(alpha = 0.6f),
                                         modifier = Modifier.padding(horizontal = 32.dp)
                                     )
                                 }
                             }
                         } else {
                             LazyColumn(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                                items(mesCollectifs) { detail ->
+                                items(mesCollectifs, key = { it.collectif.id }) { detail ->
                                     // On utilise le clubPlanning synchronisé avec Supabase pour l'affichage
                                     val schedules = clubPlanning.filter { it.teamId == detail.collectif.id }
                                     
                                     // Calcul couleur état (Rouge, Orange, Vert, Bleu)
                                     val count = detail.joueurs.size
-                                    // TODO: Récupérer le vrai seuil min via formatLimite, en attendant on met 6 par défaut
                                     val statusColor = when {
                                         detail.collectif.statut == com.example.coachapp.data.model.CollectifStatut.EN_ATTENTE_CT -> Color(0xFF2196F3) // Bleu
-                                        count >= 6 -> Color(0xFF4CAF50) // Vert (Quota atteint théorique)
-                                        count > 0 -> Color(0xFFFF9800) // Orange (En cours)
-                                        else -> Color(0xFFF44336) // Rouge (Vide)
+                                        count >= 6 -> Color(0xFF4CAF50) // Vert
+                                        count > 0 -> Color(0xFFFF9800) // Orange
+                                        else -> Color(0xFFF44336) // Rouge
                                     }
 
                                     Column {
@@ -126,18 +144,21 @@ fun TeamHubScreen(
                                         
                                         if (schedules.isNotEmpty()) {
                                             Row(
-                                                modifier = Modifier.fillMaxWidth().padding(top = 4.dp, start = 8.dp),
+                                                modifier = Modifier.fillMaxWidth().padding(top = 10.dp, start = 8.dp),
                                                 horizontalArrangement = Arrangement.spacedBy(8.dp)
                                             ) {
                                                 schedules.forEach { s ->
                                                     Surface(
-                                                        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f),
-                                                        shape = RoundedCornerShape(4.dp)
+                                                        color = Color.White.copy(alpha = 0.15f),
+                                                        shape = RoundedCornerShape(8.dp),
+                                                        border = BorderStroke(1.dp, Color(0xFF00B4D8).copy(alpha = 0.5f))
                                                     ) {
                                                         Text(
-                                                            "${s.dayOfWeek.getDisplayName(java.time.format.TextStyle.SHORT, Locale.FRENCH)} ${s.startTime}",
+                                                            "${s.dayOfWeek.getDisplayName(java.time.format.TextStyle.SHORT, Locale.FRENCH).uppercase()} ${s.startTime}",
                                                             fontSize = 10.sp,
-                                                            modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
+                                                            fontWeight = FontWeight.Bold,
+                                                            color = Color.White,
+                                                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
                                                         )
                                                     }
                                                 }
@@ -146,14 +167,16 @@ fun TeamHubScreen(
 
                                         TextButton(
                                             onClick = { selectedCollectifForSchedule = detail.collectif },
-                                            modifier = Modifier.padding(top = 2.dp),
+                                            modifier = Modifier.padding(top = 4.dp),
+                                            colors = ButtonDefaults.textButtonColors(contentColor = Color(0xFF00B4D8)),
                                             contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
                                         ) {
                                             Icon(Icons.Default.Schedule, null, modifier = Modifier.size(16.dp))
                                             Spacer(Modifier.width(8.dp))
                                             Text(
-                                                "Indiquer les horaires et jours récurrents d'entrainement",
+                                                "Gérer les horaires d'entrainement",
                                                 fontSize = 12.sp,
+                                                fontWeight = FontWeight.Bold,
                                                 textAlign = TextAlign.Start
                                             )
                                         }
@@ -184,7 +207,7 @@ fun TeamHubScreen(
                 
                 schedulesToDelete.forEach { s ->
                     s.id?.let { id ->
-                        viewModel.supprimerPlanning(
+                        trainingViewModel.supprimerPlanning(
                             scheduleId = id,
                             onSuccess = {},
                             onError = { scope.launch { snackbarHostState.showSnackbar("Erreur suppression: $it") } }
@@ -200,7 +223,7 @@ fun TeamHubScreen(
                 }
 
                 finalSchedulesToSave.forEach { s ->
-                    viewModel.enregistrerPlanning(
+                    trainingViewModel.upsertPlanning(
                         schedule = s,
                         onSuccess = {},
                         onError = { scope.launch { snackbarHostState.showSnackbar("Erreur sauvegarde: $it") } }
@@ -224,33 +247,50 @@ fun CollectifCoachCard(
     onClick: () -> Unit
 ) {
     Card(
-        modifier = Modifier.fillMaxWidth().clickable { onClick() },
-        shape = RoundedCornerShape(12.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onClick() },
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.12f)),
+        border = BorderStroke(0.5.dp, Color.White.copy(alpha = 0.2f)),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
-        Column {
-            // Bandeau de titre colorisé
+        Row(
+            modifier = Modifier.height(IntrinsicSize.Min),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // Status bar on the left
             Box(
                 modifier = Modifier
-                    .fillMaxWidth()
+                    .fillMaxHeight()
+                    .width(6.dp)
                     .background(statusColor)
-                    .padding(horizontal = 16.dp, vertical = 8.dp)
+            )
+            
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(16.dp)
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = "${collectif.categorie} ${if(collectif.sexe == "M") "Masculin" else "Féminin"}",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = Color.White
-                        )
-                        Text(collectif.nom, style = MaterialTheme.typography.bodySmall, color = Color.White.copy(alpha = 0.8f))
-                    }
-                    Icon(Icons.Default.ChevronRight, null, tint = Color.White)
-                }
+                Text(
+                    text = "${collectif.categorie} ${if(collectif.sexe == "M") "Masculin" else "Féminin"}",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White
+                )
+                Text(
+                    text = collectif.nom,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color.White.copy(alpha = 0.6f)
+                )
             }
-            // On pourrait ajouter un petit récap ici si besoin, 
-            // mais l'utilisateur a demandé à garder la structure actuelle
+            
+            Icon(
+                imageVector = Icons.Default.ChevronRight,
+                contentDescription = null,
+                tint = Color.White.copy(alpha = 0.4f),
+                modifier = Modifier.padding(end = 16.dp)
+            )
         }
     }
 }

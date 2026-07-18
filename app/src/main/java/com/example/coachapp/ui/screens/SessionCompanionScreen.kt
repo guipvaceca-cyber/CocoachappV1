@@ -2,6 +2,7 @@ package com.example.coachapp.ui.screens
 
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -49,18 +50,6 @@ fun SessionCompanionScreen(
     var isTimerRunning by remember { mutableStateOf(false) }
     var showTacticalBoard by remember { mutableStateOf(false) }
     
-    // --- SCANNER ANIMATION STATE ---
-    var showScanner by remember { mutableStateOf(true) }
-    val scannerProgress = remember { Animatable(0f) }
-    
-    LaunchedEffect(Unit) {
-        scannerProgress.animateTo(
-            targetValue = 1.2f, 
-            animationSpec = tween(1200, easing = LinearEasing)
-        )
-        showScanner = false
-    }
-
     val dateFormatter = remember { DateTimeFormatter.ofPattern("EEEE d MMMM", Locale.FRENCH) }
     
     val phases = remember(session) {
@@ -88,15 +77,19 @@ fun SessionCompanionScreen(
     }
 
     Box(modifier = modifier.fillMaxSize()) {
-        Column(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+        Column(modifier = Modifier.fillMaxSize().background(Color(0xFF001529))) {
             // --- TOP BAR ---
-            Surface(modifier = Modifier.fillMaxWidth(), color = Color.Black, shadowElevation = 4.dp) {
-                Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+            Surface(
+                modifier = Modifier.fillMaxWidth(), 
+                color = Color.White.copy(alpha = 0.05f),
+                border = BorderStroke(0.5.dp, Color.White.copy(alpha = 0.1f))
+            ) {
+                Row(modifier = Modifier.padding(16.dp).padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                     IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, null, tint = Color.White) }
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
                             text = session.date.format(dateFormatter).uppercase(),
-                            color = MaterialTheme.colorScheme.primary,
+                            color = Color(0xFF00B4D8),
                             style = MaterialTheme.typography.labelSmall,
                             fontWeight = FontWeight.Bold
                         )
@@ -117,7 +110,8 @@ fun SessionCompanionScreen(
                                 onFinish() 
                             },
                             colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4CAF50)),
-                            contentPadding = PaddingValues(horizontal = 12.dp)
+                            shape = RoundedCornerShape(12.dp),
+                            contentPadding = PaddingValues(horizontal = 16.dp)
                         ) {
                             Text("FINIR", fontWeight = FontWeight.Bold, fontSize = 12.sp)
                         }
@@ -125,7 +119,7 @@ fun SessionCompanionScreen(
 
                     // Scoreur shortcut
                     IconButton(onClick = { showTacticalBoard = true }) {
-                        Icon(Icons.Default.MenuBook, null, tint = MaterialTheme.colorScheme.primary)
+                        Icon(Icons.Default.MenuBook, null, tint = Color(0xFF00B4D8))
                     }
                 }
             }
@@ -144,25 +138,25 @@ fun SessionCompanionScreen(
                         val isPast = index < activePhaseIndex
                         
                         Surface(
-                            modifier = Modifier.size(32.dp).clickable { activePhaseIndex = index },
+                            modifier = Modifier.size(36.dp).clickable { activePhaseIndex = index },
                             shape = CircleShape,
-                            color = if (isActive) MaterialTheme.colorScheme.primary else if (isPast) Color.Gray else Color.LightGray.copy(alpha = 0.3f),
-                            border = if (isActive) androidx.compose.foundation.BorderStroke(2.dp, Color.White) else null
+                            color = if (isActive) Color(0xFF00B4D8) else if (isPast) Color.White.copy(alpha = 0.4f) else Color.White.copy(alpha = 0.1f),
+                            border = if (isActive) BorderStroke(2.dp, Color.White) else BorderStroke(1.dp, Color.White.copy(alpha = 0.2f))
                         ) {
                             Box(contentAlignment = Alignment.Center) {
-                                if (isPast) Icon(Icons.Default.Check, null, modifier = Modifier.size(16.dp), tint = Color.White)
-                                else Text("${index + 1}", color = if (isActive) Color.White else Color.Gray, fontWeight = FontWeight.Bold)
+                                if (isPast) Icon(Icons.Default.Check, null, modifier = Modifier.size(20.dp), tint = Color(0xFF001529))
+                                else Text("${index + 1}", color = if (isActive) Color.White else Color.White.copy(alpha = 0.4f), fontWeight = FontWeight.Bold)
                             }
                         }
                         if (index < phases.size - 1) {
-                            Box(modifier = Modifier.width(2.dp).height(60.dp).background(if (isPast) Color.Gray else Color.LightGray.copy(alpha = 0.3f)))
+                            Box(modifier = Modifier.width(2.dp).height(60.dp).background(if (isPast) Color(0xFF00B4D8).copy(alpha = 0.5f) else Color.White.copy(alpha = 0.1f)))
                         }
                     }
                     
                     // Final Checkmark icon
                     if (isLastPhase && timeLeftSeconds == 0) {
                         IconButton(onClick = onFinish) {
-                            Icon(Icons.Default.CheckCircle, null, tint = Color(0xFF4CAF50), modifier = Modifier.size(32.dp))
+                            Icon(Icons.Default.CheckCircle, null, tint = Color(0xFF4CAF50), modifier = Modifier.size(40.dp))
                         }
                     }
                 }
@@ -171,42 +165,62 @@ fun SessionCompanionScreen(
                 Column(modifier = Modifier.weight(1f).padding(16.dp)) {
                     val current = phases[activePhaseIndex]
                     
-                    Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(24.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
+                    Card(
+                        modifier = Modifier.fillMaxWidth(), 
+                        shape = RoundedCornerShape(24.dp), 
+                        colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.12f)),
+                        border = BorderStroke(0.5.dp, Color.White.copy(alpha = 0.2f))
+                    ) {
                         Column(modifier = Modifier.padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text(current.first, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Black)
-                            Spacer(Modifier.height(8.dp))
-                            Text(current.second.ifEmpty { "Aucun détail saisi." }, textAlign = TextAlign.Center, style = MaterialTheme.typography.bodyLarge)
+                            Text(current.first, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Black, color = Color.White)
+                            Spacer(Modifier.height(12.dp))
+                            Text(
+                                text = current.second.ifEmpty { "Aucun détail saisi." }, 
+                                textAlign = TextAlign.Center, 
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = Color.White.copy(alpha = 0.8f)
+                            )
                             
                             Spacer(Modifier.height(32.dp))
 
                             // --- TIMER CIRCLE ---
-                            Box(contentAlignment = Alignment.Center, modifier = Modifier.size(150.dp)) {
+                            Box(contentAlignment = Alignment.Center, modifier = Modifier.size(170.dp)) {
                                 CircularProgressIndicator(
                                     progress = { timeLeftSeconds.toFloat() / (current.third * 60) },
                                     modifier = Modifier.fillMaxSize(),
-                                    strokeWidth = 8.dp,
-                                    color = if (isLastPhase && timeLeftSeconds == 0) Color(0xFF4CAF50) else MaterialTheme.colorScheme.primary,
-                                    trackColor = MaterialTheme.colorScheme.surfaceVariant
+                                    strokeWidth = 10.dp,
+                                    color = if (isLastPhase && timeLeftSeconds == 0) Color(0xFF4CAF50) else Color(0xFF00B4D8),
+                                    trackColor = Color.White.copy(alpha = 0.1f),
+                                    strokeCap = androidx.compose.ui.graphics.StrokeCap.Round
                                 )
                                 val mins = timeLeftSeconds / 60
                                 val secs = timeLeftSeconds % 60
-                                Text("%02d:%02d".format(mins, secs), style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.Black)
+                                Text(
+                                    text = "%02d:%02d".format(mins, secs), 
+                                    style = MaterialTheme.typography.displayMedium, 
+                                    fontWeight = FontWeight.Black,
+                                    color = Color.White
+                                )
                             }
 
                             Spacer(Modifier.height(32.dp))
 
                             // --- CONTROLS ---
                             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceEvenly, modifier = Modifier.fillMaxWidth()) {
-                                IconButton(onClick = { timeLeftSeconds += 300 }, modifier = Modifier.background(MaterialTheme.colorScheme.surfaceVariant, CircleShape)) {
-                                    Icon(Icons.Default.Add, null)
+                                IconButton(
+                                    onClick = { timeLeftSeconds += 300 }, 
+                                    modifier = Modifier.background(Color.White.copy(alpha = 0.1f), CircleShape)
+                                ) {
+                                    Icon(Icons.Default.Add, null, tint = Color.White)
                                 }
                                 
                                 FloatingActionButton(
                                     onClick = { isTimerRunning = !isTimerRunning },
-                                    containerColor = if (isTimerRunning) Color.Red else Color(0xFF4CAF50),
+                                    containerColor = if (isTimerRunning) Color(0xFFD32F2F) else Color(0xFF388E3C),
                                     contentColor = Color.White,
                                     shape = CircleShape,
-                                    modifier = Modifier.size(72.dp)
+                                    modifier = Modifier.size(72.dp),
+                                    elevation = FloatingActionButtonDefaults.elevation(defaultElevation = 8.dp)
                                 ) {
                                     Icon(if (isTimerRunning) Icons.Default.Pause else Icons.Default.PlayArrow, modifier = Modifier.size(36.dp), contentDescription = null)
                                 }
@@ -216,9 +230,9 @@ fun SessionCompanionScreen(
                                         if (activePhaseIndex < phases.size - 1) activePhaseIndex++ 
                                         else onFinish() // Finish on last skip
                                     }, 
-                                    modifier = Modifier.background(MaterialTheme.colorScheme.surfaceVariant, CircleShape)
+                                    modifier = Modifier.background(Color.White.copy(alpha = 0.1f), CircleShape)
                                 ) {
-                                    Icon(if (isLastPhase) Icons.Default.DoneAll else Icons.Default.SkipNext, null)
+                                    Icon(if (isLastPhase) Icons.Default.DoneAll else Icons.Default.SkipNext, null, tint = Color.White)
                                 }
                             }
                         }
@@ -234,27 +248,6 @@ fun SessionCompanionScreen(
                 }
             }
         }
-        
-        // --- SCANNER OVERLAY ---
-        if (showScanner) {
-            val scannerColor = MaterialTheme.colorScheme.primary
-            Canvas(modifier = Modifier.fillMaxSize()) {
-                val y = size.height * scannerProgress.value
-                drawRect(
-                    brush = Brush.verticalGradient(
-                        colors = listOf(Color.Transparent, scannerColor.copy(alpha = 0.3f), Color.Transparent),
-                        startY = y - 100f,
-                        endY = y + 100f
-                    )
-                )
-                drawLine(
-                    color = scannerColor,
-                    start = androidx.compose.ui.geometry.Offset(0f, y),
-                    end = androidx.compose.ui.geometry.Offset(size.width, y),
-                    strokeWidth = 2.dp.toPx()
-                )
-            }
-        }
     }
 }
 
@@ -262,32 +255,47 @@ fun SessionCompanionScreen(
 fun LiveFeedbackInput(currentValue: String, onUpdate: (String) -> Unit) {
     var text by remember { mutableStateOf("") }
     
-    Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.5f))) {
-        Column(modifier = Modifier.padding(12.dp)) {
+    Card(
+        modifier = Modifier.fillMaxWidth(), 
+        shape = RoundedCornerShape(20.dp), 
+        colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.08f)),
+        border = BorderStroke(0.5.dp, Color.White.copy(alpha = 0.1f))
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Default.Mic, null, modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.primary)
+                Icon(Icons.Default.Mic, null, modifier = Modifier.size(18.dp), tint = Color(0xFF00B4D8))
                 Spacer(Modifier.width(8.dp))
-                Text("NOTES À CHAUD (AUTO-ÉVALUATION)", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
+                Text("NOTES À CHAUD", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = Color(0xFF00B4D8))
             }
             if (currentValue.isNotEmpty()) {
-                Text(currentValue, style = MaterialTheme.typography.bodySmall, color = Color.Gray, modifier = Modifier.padding(vertical = 4.dp))
+                Text(currentValue, style = MaterialTheme.typography.bodySmall, color = Color.White.copy(alpha = 0.6f), modifier = Modifier.padding(vertical = 8.dp))
             }
             Row(modifier = Modifier.padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                 OutlinedTextField(
                     value = text,
                     onValueChange = { text = it },
-                    placeholder = { Text("Note flash...", fontSize = 12.sp) },
+                    placeholder = { Text("Tapez une observation...", fontSize = 12.sp, color = Color.White.copy(alpha = 0.4f)) },
                     modifier = Modifier.weight(1f),
                     shape = RoundedCornerShape(12.dp),
-                    maxLines = 1
+                    maxLines = 1,
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedTextColor = Color.White,
+                        unfocusedTextColor = Color.White,
+                        focusedBorderColor = Color(0xFF00B4D8),
+                        unfocusedBorderColor = Color.White.copy(alpha = 0.2f)
+                    )
                 )
-                Spacer(Modifier.width(8.dp))
-                IconButton(onClick = { 
-                    val update = if (currentValue.isEmpty()) text else "$currentValue | $text"
-                    onUpdate(update)
-                    text = ""
-                }, enabled = text.isNotBlank()) {
-                    Icon(Icons.AutoMirrored.Filled.Send, null, tint = MaterialTheme.colorScheme.primary)
+                Spacer(Modifier.width(12.dp))
+                IconButton(
+                    onClick = { 
+                        val update = if (currentValue.isEmpty()) text else "$currentValue | $text"
+                        onUpdate(update)
+                        text = ""
+                    }, 
+                    enabled = text.isNotBlank(),
+                    modifier = Modifier.background(if(text.isNotBlank()) Color(0xFF00B4D8) else Color.White.copy(alpha = 0.1f), CircleShape)
+                ) {
+                    Icon(Icons.AutoMirrored.Filled.Send, null, tint = if(text.isNotBlank()) Color.White else Color.White.copy(alpha = 0.4f))
                 }
             }
         }

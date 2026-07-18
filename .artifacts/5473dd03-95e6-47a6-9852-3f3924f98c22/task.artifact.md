@@ -1,0 +1,8 @@
+- [x] Remove `isLaunchingTerrain` logic in `MainActivity.kt`
+- [x] Redesign `SessionCompanionScreen.kt`
+    - [x] Update background to Deep Dark Blue (`0xFF001529`)
+    - [x] Remove scanner animation and state
+    - [x] Style cards with glassmorphism (`0.12f` alpha)
+    - [x] Update timer color to Cyan (`0xFF00B4D8`)
+    - [x] Modernize the left timeline
+- [x] Verify build and instant transition

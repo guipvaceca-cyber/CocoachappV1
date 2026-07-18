@@ -20,6 +20,8 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.blur
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
@@ -39,6 +41,13 @@ fun MatchDashboardScreen(
     onUpdatePlayer: (Player) -> Unit
 ) {
     var selectedTeamId by remember { mutableStateOf(seasonConfig.teams.firstOrNull()?.id) }
+    
+    LaunchedEffect(seasonConfig.teams) {
+        if (selectedTeamId == null && seasonConfig.teams.isNotEmpty()) {
+            selectedTeamId = seasonConfig.teams.firstOrNull()?.id
+        }
+    }
+
     val selectedTeam = remember(selectedTeamId, seasonConfig.teams) {
         seasonConfig.teams.find { it.id == selectedTeamId }
     }
@@ -59,25 +68,93 @@ fun MatchDashboardScreen(
         showScanner = false
     }
 
-    Box(modifier = modifier.fillMaxSize()) {
-        Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("Match Dashboard", style = MaterialTheme.typography.headlineSmall, modifier = Modifier.weight(1f))
-                
-                IconButton(onClick = { showTacticalBoard = true }) {
-                    Icon(Icons.Default.MenuBook, null, tint = MaterialTheme.colorScheme.primary)
-                }
+    Box(
+        modifier = modifier
+            .fillMaxSize()
+            .background(Color(0xFF001529)) // Deep Night Blue
+    ) {
+        // --- DECORATIVE BLUR BLOBS ---
+        Box(
+            modifier = Modifier
+                .offset(x = (-60).dp, y = 150.dp)
+                .size(280.dp)
+                .background(Color(0xFF2196F3).copy(alpha = 0.12f), CircleShape)
+                .drawBehind { drawCircle(Color(0xFF2196F3).copy(alpha = 0.12f), radius = size.minDimension / 1.2f) }
+                .blur(80.dp)
+        )
+        Box(
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .offset(x = 80.dp, y = 80.dp)
+                .size(350.dp)
+                .background(Color(0xFFFF9800).copy(alpha = 0.1f), CircleShape)
+                .drawBehind { drawCircle(Color(0xFFFF9800).copy(alpha = 0.1f), radius = size.minDimension / 1.2f) }
+                .blur(100.dp)
+        )
 
-                if (seasonConfig.teams.size > 1) {
-                    var expanded by remember { mutableStateOf(false) }
-                    Box {
-                        TextButton(onClick = { expanded = true }) {
-                            Text(selectedTeam?.name ?: "Sélectionner équipe")
-                            Icon(Icons.Default.ArrowDropDown, null)
+        Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
+            // --- TOP COCKPIT BAR ---
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 20.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        "COCKPIT TERRAIN", 
+                        style = MaterialTheme.typography.labelSmall, 
+                        fontWeight = FontWeight.Black,
+                        color = Color(0xFF00B4D8),
+                        letterSpacing = 2.sp
+                    )
+                    Text(
+                        "Match Live", 
+                        style = MaterialTheme.typography.headlineMedium, 
+                        fontWeight = FontWeight.ExtraBold,
+                        color = Color.White
+                    )
+                }
+                
+                Surface(
+                    color = Color.White.copy(alpha = 0.1f),
+                    shape = RoundedCornerShape(12.dp),
+                    border = androidx.compose.foundation.BorderStroke(0.5.dp, Color.White.copy(alpha = 0.2f))
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        IconButton(onClick = { showTacticalBoard = true }) {
+                            Icon(Icons.Default.MenuBook, null, tint = Color.White, modifier = Modifier.size(20.dp))
                         }
-                        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-                            seasonConfig.teams.forEach { team ->
-                                DropdownMenuItem(text = { Text(team.name) }, onClick = { selectedTeamId = team.id; expanded = false })
+                        
+                        if (seasonConfig.teams.size > 1) {
+                            var expanded by remember { mutableStateOf(false) }
+                            Box {
+                                Row(
+                                    modifier = Modifier
+                                        .clickable { expanded = true }
+                                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        selectedTeam?.name ?: "Équipe", 
+                                        color = Color.White, 
+                                        fontWeight = FontWeight.Bold,
+                                        style = MaterialTheme.typography.bodyMedium
+                                    )
+                                    Icon(Icons.Default.ArrowDropDown, null, tint = Color.White)
+                                }
+                                DropdownMenu(
+                                    expanded = expanded, 
+                                    onDismissRequest = { expanded = false },
+                                    modifier = Modifier.background(Color(0xFF001529)).border(0.5.dp, Color.White.copy(alpha = 0.2f))
+                                ) {
+                                    seasonConfig.teams.forEach { team ->
+                                        DropdownMenuItem(
+                                            text = { Text(team.name, color = Color.White) }, 
+                                            onClick = { selectedTeamId = team.id; expanded = false }
+                                        )
+                                    }
+                                }
                             }
                         }
                     }
@@ -97,7 +174,16 @@ fun MatchDashboardScreen(
                         else 0.08f
                     )
                 ) {
-                    VolleyScorer(team = selectedTeam)
+                    VolleyScorer(
+                        team = selectedTeam, 
+                        allTeams = seasonConfig.teams,
+                        onActiveTeamSelected = { teamName ->
+                            val team = seasonConfig.teams.find { it.name == teamName }
+                            if (team != null) {
+                                selectedTeamId = team.id
+                            }
+                        }
+                    )
                 }
 
                 Spacer(modifier = Modifier.height(8.dp))
@@ -156,22 +242,45 @@ fun ExpandableSection(
 ) {
     Card(
         modifier = modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(12.dp)
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = Color.White.copy(alpha = 0.06f)
+        ),
+        border = androidx.compose.foundation.BorderStroke(0.5.dp, Color.White.copy(alpha = 0.15f))
     ) {
         Column(modifier = Modifier.fillMaxSize()) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clickable { onToggle() }
-                    .padding(12.dp),
+                    .padding(16.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Icon(if (isExpanded) Icons.Default.RemoveCircleOutline else Icons.Default.AddCircleOutline, null)
-                Spacer(Modifier.width(12.dp))
-                Text(text = title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                Surface(
+                    color = Color.White.copy(alpha = 0.1f),
+                    shape = CircleShape,
+                    modifier = Modifier.size(32.dp)
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            if (isExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore, 
+                            null, 
+                            tint = Color.White,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                }
+                Spacer(Modifier.width(16.dp))
+                Text(
+                    text = title.uppercase(), 
+                    style = MaterialTheme.typography.labelLarge, 
+                    fontWeight = FontWeight.Black,
+                    color = Color.White,
+                    letterSpacing = 1.sp
+                )
             }
             if (isExpanded) {
-                Box(modifier = Modifier.fillMaxSize().padding(horizontal = 12.dp, vertical = 4.dp)) {
+                Box(modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 8.dp)) {
                     content()
                 }
             }
@@ -180,12 +289,19 @@ fun ExpandableSection(
 }
 
 @Composable
-fun VolleyScorer(team: Team) {
+fun VolleyScorer(
+    team: Team, 
+    allTeams: List<Team>,
+    onActiveTeamSelected: (String) -> Unit = {}
+) {
     var scoreA by rememberSaveable { mutableIntStateOf(0) }
     var scoreB by rememberSaveable { mutableIntStateOf(0) }
     var setA by rememberSaveable { mutableIntStateOf(0) }
     var setB by rememberSaveable { mutableIntStateOf(0) }
     val setsHistory = remember { mutableStateListOf<String>() }
+    
+    var leftTeamName by rememberSaveable { mutableStateOf(team.name) }
+    var rightTeamName by rememberSaveable { mutableStateOf("ADVERSAIRE") }
 
     val isTieBreak = (setA + setB) == 4
     val targetPoints = if (isTieBreak) 15 else 25
@@ -196,27 +312,31 @@ fun VolleyScorer(team: Team) {
         // --- Rappel des scores des sets précédents ---
         if (setsHistory.isNotEmpty()) {
             Row(
-                modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+                modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
                 horizontalArrangement = Arrangement.Center,
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "HISTORIQUE : ",
+                    text = "HISTORIQUE",
                     style = MaterialTheme.typography.labelSmall,
-                    color = Color.Gray,
-                    fontWeight = FontWeight.Bold
+                    color = Color.White.copy(alpha = 0.5f),
+                    fontWeight = FontWeight.Black,
+                    letterSpacing = 1.sp
                 )
+                Spacer(Modifier.width(12.dp))
                 setsHistory.forEachIndexed { index, score ->
                     Surface(
-                        color = MaterialTheme.colorScheme.surfaceVariant,
-                        shape = RoundedCornerShape(4.dp),
-                        modifier = Modifier.padding(horizontal = 2.dp)
+                        color = Color.White.copy(alpha = 0.1f),
+                        shape = RoundedCornerShape(6.dp),
+                        modifier = Modifier.padding(horizontal = 4.dp),
+                        border = androidx.compose.foundation.BorderStroke(0.5.dp, Color.White.copy(alpha = 0.2f))
                     ) {
                         Text(
                             text = score,
-                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.Bold
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White
                         )
                     }
                 }
@@ -224,8 +344,32 @@ fun VolleyScorer(team: Team) {
         }
 
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
-            ScoreColumn(team.name, scoreA, setA, { if (!isSetFinished) scoreA++ }, { if (scoreA > 0) scoreA-- })
-            ScoreColumn("Adversaire", scoreB, setB, { if (!isSetFinished) scoreB++ }, { if (scoreB > 0) scoreB-- })
+            ScoreColumn(
+                teamName = leftTeamName, 
+                score = scoreA, 
+                sets = setA, 
+                teams = allTeams,
+                onTeamChange = { 
+                    leftTeamName = it
+                    onActiveTeamSelected(it)
+                },
+                onIncrement = { if (!isSetFinished) scoreA++ }, 
+                onDecrement = { if (scoreA > 0) scoreA-- },
+                isLeft = true
+            )
+            ScoreColumn(
+                teamName = rightTeamName, 
+                score = scoreB, 
+                sets = setB, 
+                teams = allTeams,
+                onTeamChange = { 
+                    rightTeamName = it
+                    onActiveTeamSelected(it)
+                },
+                onIncrement = { if (!isSetFinished) scoreB++ }, 
+                onDecrement = { if (scoreB > 0) scoreB-- },
+                isLeft = false
+            )
         }
 
         if (isSetFinished) {
@@ -283,73 +427,139 @@ fun RotationManager(team: Team, seasonConfig: SeasonConfig, onUpdatePlayer: (Pla
                 SegmentedButton(
                     selected = matchFormat == TeamFormat.FOUR_FOUR,
                     onClick = { matchFormat = TeamFormat.FOUR_FOUR },
-                    shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2)
+                    shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2),
+                    colors = SegmentedButtonDefaults.colors(
+                        activeContainerColor = Color(0xFF00B4D8),
+                        activeContentColor = Color.White,
+                        inactiveContainerColor = Color.White.copy(alpha = 0.05f),
+                        inactiveContentColor = Color.White.copy(alpha = 0.6f)
+                    )
                 ) { Text("4x4") }
                 SegmentedButton(
                     selected = matchFormat == TeamFormat.SIX_SIX,
                     onClick = { matchFormat = TeamFormat.SIX_SIX },
-                    shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2)
+                    shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2),
+                    colors = SegmentedButtonDefaults.colors(
+                        activeContainerColor = Color(0xFF00B4D8),
+                        activeContentColor = Color.White,
+                        inactiveContainerColor = Color.White.copy(alpha = 0.05f),
+                        inactiveContentColor = Color.White.copy(alpha = 0.6f)
+                    )
                 ) { Text("6x6") }
             }
         }
 
         if (isSmallFormat) {
             Box(
-                modifier = Modifier.fillMaxWidth().height(200.dp).background(Color(0xFFE67E22).copy(alpha = 0.1f), RoundedCornerShape(12.dp)),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(200.dp)
+                    .background(Color.White.copy(alpha = 0.05f), RoundedCornerShape(20.dp))
+                    .border(0.5.dp, Color.White.copy(alpha = 0.1f), RoundedCornerShape(20.dp)),
                 contentAlignment = Alignment.Center
             ) {
                 Text(
                     "Format ${matchFormat.label}\nPas de rotations arrière à gérer.", 
                     textAlign = TextAlign.Center, 
                     style = MaterialTheme.typography.bodyMedium,
-                    color = Color.Gray
+                    color = Color.White.copy(alpha = 0.5f),
+                    fontWeight = FontWeight.Medium
                 )
             }
         } else {
-            Box(modifier = Modifier.height(220.dp).aspectRatio(0.85f).background(Color(0xFFE67E22), RoundedCornerShape(8.dp)).border(2.dp, Color.White, RoundedCornerShape(8.dp))) {
-                val alignments = when(matchFormat) {
-                    TeamFormat.SIX_SIX -> listOf(Alignment.BottomEnd, Alignment.TopEnd, Alignment.TopCenter, Alignment.TopStart, Alignment.BottomStart, Alignment.BottomCenter)
-                    TeamFormat.FOUR_FOUR -> listOf(Alignment.BottomEnd, Alignment.TopEnd, Alignment.TopStart, Alignment.BottomStart)
-                    else -> emptyList()
-                }
-                
-                val defaultRoles = if (matchFormat == TeamFormat.SIX_SIX) 
-                    listOf("P1", "P2", "P3", "P4", "P5", "P6")
-                else 
-                    listOf("Ar-D", "Av-D", "Av-G", "Ar-G")
-
-                alignments.forEachIndexed { index, alignment ->
-                    val actualIndex = (index + rotationOffset) % positionsCount
-                    val playerId = onField.getOrNull(actualIndex)
-                    val player = teamPlayers.find { it.id == playerId }
-                    val roleLabel = player?.position?.take(2) ?: defaultRoles.getOrNull(index) ?: "?"
-                    
-                    Box(modifier = Modifier.fillMaxSize().padding(8.dp), contentAlignment = alignment) {
-                        PlayerCircle(
-                            number = player?.number?.toString() ?: "?",
-                            role = roleLabel,
-                            isSelected = selectedPositionIndex == actualIndex,
-                            onClick = { 
-                                selectedPositionIndex = actualIndex
-                                selectedTargetRole = player?.position ?: defaultRoles.getOrNull(index) ?: ""
-                                showActionDialog = true
-                            }
-                        )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Center
+            ) {
+                // Bouton Rotation à gauche
+                Button(
+                    onClick = { rotationOffset = (rotationOffset + 1) % positionsCount },
+                    modifier = Modifier.size(width = 60.dp, height = 80.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color.White.copy(alpha = 0.12f)),
+                    shape = RoundedCornerShape(16.dp),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = 0.2f)),
+                    contentPadding = PaddingValues(0.dp)
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Icon(Icons.Default.Autorenew, null, modifier = Modifier.size(24.dp), tint = Color.White)
+                        Spacer(Modifier.height(4.dp))
+                        Text("ROT.", fontSize = 10.sp, fontWeight = FontWeight.Black, color = Color.White)
                     }
                 }
-            }
-            
-            Spacer(Modifier.height(12.dp))
-            Row {
-                Button(onClick = { rotationOffset = (rotationOffset + 1) % positionsCount }) {
-                    Text("Rotation P${(rotationOffset % positionsCount) + 1}")
+
+                Spacer(Modifier.width(12.dp))
+
+                Box(
+                    modifier = Modifier
+                        .height(240.dp)
+                        .aspectRatio(0.85f)
+                        .background(Color(0xFF0C2D48), RoundedCornerShape(16.dp)) // Deep Tactical Blue
+                        .border(1.5.dp, Color.White.copy(alpha = 0.3f), RoundedCornerShape(16.dp))
+                ) {
+                    // Court Lines
+                    Canvas(modifier = Modifier.fillMaxSize()) {
+                        val w = size.width
+                        val h = size.height
+                        val lineCol = Color.White.copy(alpha = 0.4f)
+                        // Center Line
+                        drawLine(lineCol, androidx.compose.ui.geometry.Offset(0f, h/2), androidx.compose.ui.geometry.Offset(w, h/2), strokeWidth = 4f)
+                        // Attack Lines
+                        drawLine(lineCol, androidx.compose.ui.geometry.Offset(0f, h*0.3f), androidx.compose.ui.geometry.Offset(w, h*0.3f), strokeWidth = 2f)
+                        drawLine(lineCol, androidx.compose.ui.geometry.Offset(0f, h*0.7f), androidx.compose.ui.geometry.Offset(w, h*0.7f), strokeWidth = 2f)
+                    }
+
+                    val alignments = when(matchFormat) {
+                        TeamFormat.SIX_SIX -> listOf(Alignment.BottomEnd, Alignment.TopEnd, Alignment.TopCenter, Alignment.TopStart, Alignment.BottomStart, Alignment.BottomCenter)
+                        TeamFormat.FOUR_FOUR -> listOf(Alignment.BottomEnd, Alignment.TopEnd, Alignment.TopStart, Alignment.BottomStart)
+                        else -> emptyList()
+                    }
+                    
+                    val defaultRoles = if (matchFormat == TeamFormat.SIX_SIX) 
+                        listOf("P1", "P2", "P3", "P4", "P5", "P6")
+                    else 
+                        listOf("Ar-D", "Av-D", "Av-G", "Ar-G")
+
+                    alignments.forEachIndexed { index, alignment ->
+                        val actualIndex = (index + rotationOffset) % positionsCount
+                        val playerId = onField.getOrNull(actualIndex)
+                        val player = teamPlayers.find { it.id == playerId }
+                        val roleLabel = player?.position?.take(2) ?: defaultRoles.getOrNull(index) ?: "?"
+                        
+                        Box(modifier = Modifier.fillMaxSize().padding(8.dp), contentAlignment = alignment) {
+                            PlayerCircle(
+                                number = player?.number?.toString() ?: "?",
+                                role = roleLabel,
+                                isSelected = selectedPositionIndex == actualIndex,
+                                onClick = { 
+                                    selectedPositionIndex = actualIndex
+                                    selectedTargetRole = player?.position ?: defaultRoles.getOrNull(index) ?: ""
+                                    showActionDialog = true
+                                }
+                            )
+                        }
+                    }
                 }
-                Spacer(Modifier.width(8.dp))
-                OutlinedButton(onClick = { 
-                    onField.indices.forEach { onField[it] = null }
-                    rotationOffset = 0
-                }) {
-                    Text("Vider")
+
+                Spacer(Modifier.width(12.dp))
+
+                // Bouton Vider à droite
+                OutlinedButton(
+                    onClick = { 
+                        onField.indices.forEach { onField[it] = null }
+                        rotationOffset = 0
+                    },
+                    modifier = Modifier.size(width = 60.dp, height = 80.dp),
+                    shape = RoundedCornerShape(16.dp),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, Color.Red.copy(alpha = 0.4f)),
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.Red),
+                    contentPadding = PaddingValues(0.dp)
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Icon(Icons.Default.DeleteSweep, null, modifier = Modifier.size(24.dp), tint = Color.Red)
+                        Spacer(Modifier.height(4.dp))
+                        Text("VIDER", fontSize = 10.sp, fontWeight = FontWeight.Black, color = Color.Red)
+                    }
                 }
             }
         }
@@ -378,18 +588,35 @@ fun RotationManager(team: Team, seasonConfig: SeasonConfig, onUpdatePlayer: (Pla
 fun PlayerCircle(number: String, role: String, isSelected: Boolean, onClick: () -> Unit) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         Surface(
-            modifier = Modifier.size(42.dp),
+            modifier = Modifier.size(46.dp),
             shape = CircleShape,
-            color = if (isSelected) MaterialTheme.colorScheme.primary else Color.White,
-            border = androidx.compose.foundation.BorderStroke(2.dp, MaterialTheme.colorScheme.primary),
+            color = if (isSelected) Color(0xFF00B4D8) else Color.White.copy(alpha = 0.9f),
+            shadowElevation = if (isSelected) 8.dp else 2.dp,
             onClick = onClick
         ) {
             Box(contentAlignment = Alignment.Center) {
-                Text(text = number, fontWeight = FontWeight.Bold, color = if (isSelected) Color.White else Color.Black)
+                Text(
+                    text = number, 
+                    fontWeight = FontWeight.Black, 
+                    color = if (isSelected) Color.White else Color(0xFF001529),
+                    fontSize = 18.sp
+                )
             }
         }
         if (role.isNotEmpty()) {
-            Text(text = role, fontSize = 10.sp, fontWeight = FontWeight.ExtraBold, color = Color.White)
+            Surface(
+                modifier = Modifier.padding(top = 4.dp),
+                color = Color.Black.copy(alpha = 0.4f),
+                shape = RoundedCornerShape(4.dp)
+            ) {
+                Text(
+                    text = role, 
+                    fontSize = 9.sp, 
+                    fontWeight = FontWeight.ExtraBold, 
+                    color = Color.White,
+                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
+                )
+            }
         }
     }
 }

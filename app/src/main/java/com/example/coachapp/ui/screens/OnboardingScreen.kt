@@ -1,6 +1,7 @@
 package com.example.coachapp.ui.screens
 
 import androidx.compose.animation.*
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -30,10 +31,11 @@ import java.util.*
 fun OnboardingScreen(
     initialConfig: SeasonConfig,
     pendingInvitations: List<Team> = emptyList(),
-    onCompleted: (SeasonConfig) -> Unit
+    onCompleted: (SeasonConfig, List<String>) -> Unit
 ) {
     var step by remember { mutableIntStateOf(1) }
     var config by remember { mutableStateOf(initialConfig) }
+    val intentions = remember { mutableStateListOf<String>() }
 
     Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         Column(
@@ -62,10 +64,15 @@ fun OnboardingScreen(
                 ) { targetStep ->
                     when (targetStep) {
                         1 -> IdentityStep(config) { updated -> config = updated; step = 2 }
-                        2 -> ProfessionalStep(config) { updated -> config = updated; step = 3 }
+                        2 -> ProfessionalStep(config) { updated, ints -> 
+                            config = updated
+                            intentions.clear()
+                            intentions.addAll(ints)
+                            step = 3 
+                        }
                         3 -> PersonaStep(config) { updated -> config = updated; step = 4 }
                         4 -> TeamsStep(config, pendingInvitations) { updated -> config = updated; step = 5 }
-                        5 -> FinalStep(config) { onCompleted(config.copy(isOnboardingCompleted = true)) }
+                        5 -> FinalStep(config) { onCompleted(config.copy(isOnboardingCompleted = true), intentions.toList()) }
                     }
                 }
             }
@@ -85,7 +92,7 @@ fun IdentityStep(config: SeasonConfig, onNext: (SeasonConfig) -> Unit) {
         Spacer(Modifier.height(32.dp))
         
         Box(modifier = Modifier.size(100.dp).clickable { showPhotoPicker = true }, contentAlignment = Alignment.BottomEnd) {
-            Surface(modifier = Modifier.fillMaxSize(), shape = CircleShape, color = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f), border = androidx.compose.foundation.BorderStroke(2.dp, MaterialTheme.colorScheme.primary)) {
+            Surface(modifier = Modifier.fillMaxSize(), shape = CircleShape, color = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f), border = BorderStroke(2.dp, MaterialTheme.colorScheme.primary)) {
                 Box(contentAlignment = Alignment.Center) {
                     Icon(Icons.Default.AddAPhoto, null, modifier = Modifier.size(40.dp), tint = MaterialTheme.colorScheme.primary)
                 }
@@ -125,39 +132,67 @@ fun IdentityStep(config: SeasonConfig, onNext: (SeasonConfig) -> Unit) {
 }
 
 @Composable
-fun ProfessionalStep(config: SeasonConfig, onNext: (SeasonConfig) -> Unit) {
-    val levels = listOf("Novice", "AFJ", "DRE1", "ER", "DRE2", "EF", "EN", "Master Coach")
-    var selectedLevel by remember { mutableStateOf(config.coachProfile.formationLevel) }
+fun ProfessionalStep(config: SeasonConfig, onNext: (SeasonConfig, List<String>) -> Unit) {
+    var selectedDiploma by remember { mutableStateOf<Diploma?>(null) }
+    val selectedModules = remember { 
+        mutableStateMapOf<String, Boolean>().apply { 
+            config.coachProfile.acquiredModules.forEach { put(it, true) }
+        }
+    }
+    
+    // Pour les novices
+    var wantsJAPS by remember { mutableStateOf(false) }
+    var wantsAFJ by remember { mutableStateOf(false) }
+
     var goalPersonal by remember { mutableStateOf(config.coachProfile.goalPersonal) }
     var goalCollective by remember { mutableStateOf(config.coachProfile.goalCollective) }
 
     Column(modifier = Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally) {
         Spacer(Modifier.height(32.dp))
         Text("Votre Parcours", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Black)
-        Text("Définissez vos ambitions.", style = MaterialTheme.typography.bodyMedium, color = Color.Gray)
+        Text("Définissez vos acquis et ambitions.", style = MaterialTheme.typography.bodyMedium, color = Color.Gray)
         
         Spacer(Modifier.height(24.dp))
 
         Column(modifier = Modifier.weight(1f).verticalScroll(rememberScrollState())) {
-            Text("Diplôme actuel :", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
-            Spacer(Modifier.height(8.dp))
+            Text("Diplômes et modules acquis :", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
+            Spacer(Modifier.height(12.dp))
             
-            Column {
-                levels.chunked(3).forEach { row ->
-                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        row.forEach { level ->
-                            FilterChip(
-                                selected = selectedLevel == level,
-                                onClick = { selectedLevel = level },
-                                label = { Text(level, fontSize = 10.sp) },
-                                modifier = Modifier.weight(1f)
-                            )
+            ffvbDiplomas.forEach { diploma ->
+                DiplomaExpandableCard(
+                    diploma = diploma,
+                    isExpanded = selectedDiploma?.id == diploma.id,
+                    onClick = { selectedDiploma = if (selectedDiploma?.id == diploma.id) null else diploma },
+                    selectedModules = selectedModules
+                )
+                Spacer(Modifier.height(8.dp))
+            }
+            
+            val isNovice = selectedModules.none { it.value }
+            if (isNovice) {
+                Spacer(Modifier.height(16.dp))
+                Surface(
+                    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f),
+                    shape = RoundedCornerShape(16.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Text("Accompagnement Novice", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                        Text("Tu n'as pas encore de diplôme ? On t'aide à démarrer !", style = MaterialTheme.typography.bodySmall)
+                        Spacer(Modifier.height(12.dp))
+                        
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Checkbox(checked = wantsJAPS, onCheckedChange = { wantsJAPS = it })
+                            Text("M'inscrire à la JAPS (Valence, 08 sept.)", style = MaterialTheme.typography.bodySmall)
                         }
-                        if (row.size < 3) Spacer(Modifier.weight((3 - row.size).toFloat()))
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Checkbox(checked = wantsAFJ, onCheckedChange = { wantsAFJ = it })
+                            Text("M'inscrire à l'AFJ (M7 à M13)", style = MaterialTheme.typography.bodySmall)
+                        }
                     }
                 }
             }
-            
+
             Spacer(Modifier.height(24.dp))
             Text("Projets de saison :", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
             Spacer(Modifier.height(8.dp))
@@ -169,11 +204,98 @@ fun ProfessionalStep(config: SeasonConfig, onNext: (SeasonConfig) -> Unit) {
         Spacer(Modifier.height(32.dp))
 
         Button(
-            onClick = { onNext(config.copy(coachProfile = config.coachProfile.copy(formationLevel = selectedLevel, goalPersonal = goalPersonal, goalCollective = goalCollective))) },
+            onClick = { 
+                val acquired = selectedModules.filter { it.value }.keys.toList()
+                val level = ffvbDiplomas.lastOrNull { d -> d.modules.any { m -> selectedModules[m.id] == true } }?.name ?: "Novice"
+                
+                val currentIntentions = mutableListOf<String>()
+                if (wantsJAPS) currentIntentions.add("JAPS")
+                if (wantsAFJ) currentIntentions.add("AFJ")
+
+                onNext(
+                    config.copy(coachProfile = config.coachProfile.copy(
+                        formationLevel = level,
+                        acquiredModules = acquired,
+                        goalPersonal = goalPersonal, 
+                        goalCollective = goalCollective
+                    )),
+                    currentIntentions
+                ) 
+            },
             modifier = Modifier.fillMaxWidth().height(64.dp),
             shape = RoundedCornerShape(16.dp)
         ) {
             Text("Suivant", fontWeight = FontWeight.Bold, fontSize = 18.sp)
+        }
+    }
+}
+
+@Composable
+fun DiplomaExpandableCard(
+    diploma: Diploma,
+    isExpanded: Boolean,
+    onClick: () -> Unit,
+    selectedModules: MutableMap<String, Boolean>
+) {
+    val acquiredCount = diploma.modules.count { selectedModules[it.id] == true }
+    
+    Card(
+        modifier = Modifier.fillMaxWidth().clickable { onClick() },
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = if (isExpanded) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f) 
+                             else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+        ),
+        border = if (acquiredCount > 0) BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)) else null
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(diploma.name, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
+                        if (acquiredCount > 0) {
+                            Spacer(Modifier.width(8.dp))
+                            Surface(
+                                color = MaterialTheme.colorScheme.primary,
+                                shape = CircleShape,
+                                modifier = Modifier.size(18.dp)
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Text(
+                                        text = if (acquiredCount == diploma.modules.size) "✓" else "$acquiredCount",
+                                        color = Color.White,
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                            }
+                        }
+                    }
+                    Text(diploma.level, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+                }
+                Icon(
+                    imageVector = if (isExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                    contentDescription = null
+                )
+            }
+
+            if (isExpanded) {
+                Spacer(Modifier.height(12.dp))
+                diploma.modules.forEach { module ->
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.fillMaxWidth().clickable { 
+                            selectedModules[module.id] = !(selectedModules[module.id] ?: false)
+                        }
+                    ) {
+                        Checkbox(
+                            checked = selectedModules[module.id] ?: false,
+                            onCheckedChange = { selectedModules[module.id] = it }
+                        )
+                        Text(module.label, style = MaterialTheme.typography.bodyMedium)
+                    }
+                }
+            }
         }
     }
 }

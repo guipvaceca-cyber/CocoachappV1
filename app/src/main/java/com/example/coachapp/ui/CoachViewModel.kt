@@ -92,11 +92,17 @@ class CoachViewModel(application: Application) : AndroidViewModel(application) {
     var isCoachCde by mutableStateOf(false)
         private set
 
+    var isStageOpen by mutableStateOf(false)
+        private set
+
     // Liste des affectations CDE (ex: M13M selection_principal, M18F selection_principal)
     var cdeAssignments by mutableStateOf<List<CdeAssignment>>(emptyList())
         private set
 
     var pendingInvitations by mutableStateOf<List<Team>>(emptyList())
+        private set
+
+    var selectionAlerteMessage by mutableStateOf<String?>(null)
         private set
 
     // --- COMMUNITY / LOCKER ROOM ---
@@ -336,11 +342,41 @@ class CoachViewModel(application: Application) : AndroidViewModel(application) {
                 withContext(Dispatchers.Main) {
                     slotsPersistes = principal
                     bancPersiste = banc
+                    traiterRemplacementsAutomatiques()
                 }
             } catch (e: Exception) {
                 android.util.Log.e("CONVOCATION", "Erreur chargement slots", e)
             }
         }
+    }
+
+    private fun traiterRemplacementsAutomatiques() {
+        var aFaitUnChangement = false
+        val principal = slotsPersistes.toMutableList()
+        val banc = bancPersiste.toMutableList()
+        var alerte = false
+
+        principal.forEachIndexed { index, slot ->
+            if (slot?.statut == com.example.coachapp.ui.screens.StatutSlot.INDISPONIBLE) {
+                // Chercher un remplaçant
+                val idxRemplacant = banc.indexOfFirst { it != null }
+                if (idxRemplacant != -1) {
+                    val remplacant = banc[idxRemplacant]!!.copy(statut = com.example.coachapp.ui.screens.StatutSlot.INSCRIT)
+                    principal[index] = remplacant
+                    banc[idxRemplacant] = null
+                    aFaitUnChangement = true
+                    Log.d("CONVOCATION", "Remplacement auto : ${remplacant.nom} prend la place de ${slot.nom}")
+                } else {
+                    alerte = true
+                }
+            }
+        }
+
+        if (aFaitUnChangement) {
+            sauvegarderSelection(principal, banc)
+        }
+        
+        selectionAlerteMessage = if (alerte) "Une place titulaire est vacante et votre banc est vide !" else null
     }
 
     fun sauvegarderSlot(
@@ -463,6 +499,46 @@ class CoachViewModel(application: Application) : AndroidViewModel(application) {
             }
         }
     }
+
+    fun envoyerSelection(categorie: String) {
+        val userId = SupabaseManager.auth.currentUserOrNull()?.id ?: return
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                // 1. Marquer la convocation comme ENVOYE
+                SupabaseManager.db.from("cde_convocation").update(
+                    mapOf("statut" to "ENVOYE")
+                ) {
+                    filter {
+                        eq("coach_id", userId)
+                        eq("categorie", categorie)
+                        or {
+                            eq("statut", "BROUILLON")
+                            eq("statut", "READY")
+                        }
+                    }
+                }
+
+                // 2. Verrouiller les slots du tableau principal (passer en INSCRIT)
+                val convId = convocationEnCours ?: return@launch
+                SupabaseManager.db.from("cde_slot").update(
+                    mapOf("statut" to "INSCRIT")
+                ) {
+                    filter {
+                        eq("convocation_id", convId)
+                        eq("type_tableau", "PRINCIPAL")
+                        eq("statut", "CONVOQUE")
+                    }
+                }
+
+                Log.d("CONVOCATION", "Sélection $categorie envoyée et slots verrouillés")
+                
+                // Rafraîchir pour voir le nouveau statut
+                creerOuChargerConvocation(categorie, 14) 
+            } catch (e: Exception) {
+                Log.e("CONVOCATION", "Erreur envoi sélection", e)
+            }
+        }
+    }
     fun fetchLockerRoomPosts() {
         viewModelScope.launch {
             isLockerRoomLoading = true
@@ -477,6 +553,34 @@ class CoachViewModel(application: Application) : AndroidViewModel(application) {
                 publicPosts = mockPosts
             } finally {
                 isLockerRoomLoading = false
+            }
+        }
+    }
+
+    fun checkStageOpening(categorie: String, sexe: String) {
+        viewModelScope.launch {
+            try {
+                val response = SupabaseManager.db.from("stage")
+                    .select {
+                        filter {
+                            eq("categorie", categorie)
+                            eq("sexe", sexe)
+                        }
+                    }
+                val stages = response.decodeList<Stage>()
+                if (stages.isNotEmpty()) {
+                    val stage = stages[0]
+                    val openingDate = LocalDate.parse(stage.dateOuvertureInscription)
+                    val today = LocalDate.now()
+                    isStageOpen = today.isAfter(openingDate) || today.isEqual(openingDate)
+                    Log.d("STAGE", "Stage trouvé pour $categorie $sexe : ouverture le $openingDate. isStageOpen = $isStageOpen")
+                } else {
+                    isStageOpen = false
+                    Log.d("STAGE", "Aucun stage trouvé pour $categorie $sexe")
+                }
+            } catch (e: Exception) {
+                Log.e("STAGE", "Erreur checkStageOpening", e)
+                isStageOpen = false
             }
         }
     }
@@ -523,6 +627,7 @@ class CoachViewModel(application: Application) : AndroidViewModel(application) {
                         "admin" -> UserRole.ADMIN
                         "megadmin" -> UserRole.MEGADMIN
                         "president_club" -> UserRole.PRESIDENT_CLUB
+                        "referent_tech" -> UserRole.REFERENT_TECH
                         else -> UserRole.USER
                     }
                     userRole = detectedRole
@@ -544,9 +649,10 @@ class CoachViewModel(application: Application) : AndroidViewModel(application) {
                         val sexe = getStr("cde_sexe") ?: "M"
                         val role = getStr("cde_role") ?: "selection_adjoint"
                         cdeAssignments = listOf(CdeAssignment(cat, sexe, role))
+                        checkStageOpening(cat, sexe)
                     }
                     
-                    if (detectedRole == UserRole.PRESIDENT_CLUB) {
+                    if (detectedRole == UserRole.PRESIDENT_CLUB || detectedRole == UserRole.REFERENT_TECH) {
                         presidentClubId = getStr("club_id")
                         Log.d("DEBUG_ROLE", "Club ID récupéré du profil = $presidentClubId")
                     }
@@ -566,6 +672,10 @@ class CoachViewModel(application: Application) : AndroidViewModel(application) {
                     } else if ("president_club" in appRoles) {
                         userRole = UserRole.PRESIDENT_CLUB
                         val clubEntry = userRolesList.firstOrNull { it["role"]?.toString()?.replace("\"", "") == "president_club" }
+                        presidentClubId = clubEntry?.get("club_id")?.toString()?.replace("\"", "")
+                    } else if ("referent_tech" in appRoles) {
+                        userRole = UserRole.REFERENT_TECH
+                        val clubEntry = userRolesList.firstOrNull { it["role"]?.toString()?.replace("\"", "") == "referent_tech" }
                         presidentClubId = clubEntry?.get("club_id")?.toString()?.replace("\"", "")
                     }
                 } catch (e: Exception) {
@@ -759,7 +869,12 @@ class CoachViewModel(application: Application) : AndroidViewModel(application) {
                     context = getApplication(),
                     categories = listOf(categorie),
                     teamId = team.id
-                )
+                ).map { event ->
+                    // Pre-fill attendance with all players of this team
+                    val players = seasonConfig.players.filter { it.teamId == team.id }
+                    val initialAttendance = players.associate { it.id to "pending" }
+                    event.copy(attendance = initialAttendance)
+                }
                 nouveauxEvenements.addAll(events)
             }
             withContext(Dispatchers.Main) {
@@ -823,6 +938,12 @@ class CoachViewModel(application: Application) : AndroidViewModel(application) {
         updateSeasonConfig(seasonConfig.copy(helpUsages = seasonConfig.helpUsages + now))
     }
 
+    fun updateClubEventAttendance(eventId: String, status: String) {
+        val updatedRegistrations = seasonConfig.clubEventRegistrations.toMutableMap()
+        updatedRegistrations[eventId] = status
+        updateSeasonConfig(seasonConfig.copy(clubEventRegistrations = updatedRegistrations))
+    }
+
     fun getHelpUsageCountThisMonth(): Int {
         val now = LocalDate.now()
         return seasonConfig.helpUsages.count {
@@ -845,6 +966,24 @@ class CoachViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun isMonthlyReviewDue(): Boolean = LocalDate.now().dayOfMonth == 1
+
+    fun preRegisterFormation(type: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val userId = SupabaseManager.auth.currentUserOrNull()?.id ?: return@launch
+                val entry = mapOf(
+                    "user_id" to userId,
+                    "formation_type" to type,
+                    "timestamp" to System.currentTimeMillis(),
+                    "statut" to "INTENTION"
+                )
+                SupabaseManager.db.from("formation_pre_registrations").insert(entry)
+                Log.d("FORMATION", "Pré-inscription réussie pour $type")
+            } catch (e: Exception) {
+                Log.e("FORMATION", "Erreur pré-inscription $type", e)
+            }
+        }
+    }
 
     fun clearSelectedResource() { selectedResource = null }
     fun clearSelectedTool() { selectedTool = null }

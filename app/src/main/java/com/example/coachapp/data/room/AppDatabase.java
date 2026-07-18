@@ -9,19 +9,22 @@ import androidx.room.RoomDatabase;
 import com.example.coachapp.data.room.BlocSeanceDao;
 import com.example.coachapp.data.room.CycleDao;
 import com.example.coachapp.data.room.SeanceDao;
+import com.example.coachapp.data.room.VoiceNoteDao;
 import com.example.coachapp.data.room.BlocSeance;
 import com.example.coachapp.data.room.Categorie;
 import com.example.coachapp.data.room.Cycle;
 import com.example.coachapp.data.room.Seance;
+import com.example.coachapp.data.room.VoiceNoteEntity;
 
 @Database(
     entities = {
         Categorie.class,
         Cycle.class,
         Seance.class,
-        BlocSeance.class
+        BlocSeance.class,
+        VoiceNoteEntity.class
     },
-    version = 3,
+    version = 4,
     exportSchema = false
 )
 public abstract class AppDatabase extends RoomDatabase {
@@ -29,6 +32,7 @@ public abstract class AppDatabase extends RoomDatabase {
     public abstract SeanceDao seanceDao();
     public abstract BlocSeanceDao blocSeanceDao();
     public abstract CycleDao cycleDao();
+    public abstract VoiceNoteDao voiceNoteDao();
 
     // Singleton — une seule instance dans toute l'app
     private static volatile AppDatabase INSTANCE;

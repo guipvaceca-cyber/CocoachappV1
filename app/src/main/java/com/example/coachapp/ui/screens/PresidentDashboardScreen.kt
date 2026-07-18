@@ -1,5 +1,7 @@
 package com.example.coachapp.ui.screens
 
+import android.util.Log
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -16,10 +18,17 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import com.example.coachapp.data.ClubEvent
+import com.example.coachapp.data.ClubEventScope
+import com.example.coachapp.data.ClubEventType
+import com.example.coachapp.data.Team
+import com.example.coachapp.data.model.Collectif
 import com.example.coachapp.data.model.CollectifAvecDetail
 import com.example.coachapp.data.model.CollectifStatut
 import com.example.coachapp.data.model.Poste
@@ -31,6 +40,10 @@ import com.example.coachapp.ui.util.PlayerQrData
 import com.example.coachapp.ui.util.QrCodeDisplay
 import com.example.coachapp.ui.util.TeamQrPayload
 import kotlinx.coroutines.launch
+import java.time.LocalDate
+import java.time.LocalTime
+import java.time.format.DateTimeFormatter
+import java.util.UUID
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -39,7 +52,12 @@ fun PresidentDashboardScreen(
     onBack: () -> Unit
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    
+    LaunchedEffect(Unit) {
+        viewModel.chargerCollectifs()
+    }
     var showAddCollectif by remember { mutableStateOf(false) }
+    var showAddClubEvent by remember { mutableStateOf(false) }
     var collectifIdForInvite by remember { mutableStateOf<String?>(null) }
     var collectifIdForSelfAssign by remember { mutableStateOf<String?>(null) }
     var collectifForDelete by remember { mutableStateOf<CollectifAvecDetail?>(null) }
@@ -93,15 +111,18 @@ fun PresidentDashboardScreen(
                     }
                 }
                 is PresidentUiState.Success -> {
+                    val clubEvents by viewModel.clubEvents.collectAsState()
                     PresidentContent(
                         collectifs = state.collectifs,
                         collectifsEnAttente = state.collectifsEnAttente,
+                        clubEvents = clubEvents,
                         selectedSeason = viewModel.selectedSeason,
                         onSeasonChange = { viewModel.updateSeason(it) },
                         onInviteClick = { collectifIdForInvite = it },
                         onDeleteClick = { collectifForDelete = it },
                         onSelfAssignClick = { collectifIdForSelfAssign = it },
                         onQrClick = { collectifForQr = it },
+                        onAddClubEventClick = { showAddClubEvent = true },
                         onValidateClick = { id ->
                             viewModel.validerCollectif(id, 
                                 onSuccess = { scope.launch { snackbarHostState.showSnackbar("Collectif validé !") } },
@@ -128,6 +149,23 @@ fun PresidentDashboardScreen(
                         onSuccess = { 
                             showAddCollectif = false 
                             scope.launch { snackbarHostState.showSnackbar("Collectif créé !") }
+                        },
+                        onError = { err -> scope.launch { snackbarHostState.showSnackbar(err) } }
+                    )
+                }
+            )
+        }
+
+        if (showAddClubEvent) {
+            val presidentSuccess = uiState as? PresidentUiState.Success
+            AddClubEventDialog(
+                collectifs = presidentSuccess?.collectifs ?: emptyList(),
+                onDismiss = { showAddClubEvent = false },
+                onConfirm = { event ->
+                    viewModel.pushClubEvent(event,
+                        onSuccess = { 
+                            showAddClubEvent = false
+                            scope.launch { snackbarHostState.showSnackbar("Événement club créé !") }
                         },
                         onError = { err -> scope.launch { snackbarHostState.showSnackbar(err) } }
                     )
@@ -225,6 +263,7 @@ fun PresidentDashboardScreen(
 fun PresidentContent(
     collectifs: List<CollectifAvecDetail>,
     collectifsEnAttente: List<CollectifAvecDetail>,
+    clubEvents: List<com.example.coachapp.data.ClubEvent>,
     selectedSeason: String,
     onSeasonChange: (String) -> Unit,
     onInviteClick: (String) -> Unit,
@@ -232,6 +271,7 @@ fun PresidentContent(
     onSelfAssignClick: (String) -> Unit,
     onValidateClick: (String) -> Unit,
     onRejectClick: (String) -> Unit,
+    onAddClubEventClick: () -> Unit,
     onQrClick: (CollectifAvecDetail) -> Unit = {}
 ) {
     LazyColumn(
@@ -241,6 +281,46 @@ fun PresidentContent(
     ) {
         item {
             SeasonSelector(selectedSeason, onSeasonChange)
+        }
+
+        // --- SECTION VIE DU CLUB ---
+        item {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = Color(0xFF001529)),
+                border = BorderStroke(1.dp, Color.White.copy(alpha = 0.2f)),
+                shape = RoundedCornerShape(20.dp)
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text("VIE DU CLUB", style = MaterialTheme.typography.labelLarge, color = Color(0xFF00B4D8), fontWeight = FontWeight.Bold)
+                        TextButton(onClick = onAddClubEventClick) {
+                            Icon(Icons.Default.Add, null, modifier = Modifier.size(16.dp))
+                            Spacer(Modifier.width(4.dp))
+                            Text("Ajouter", fontSize = 12.sp)
+                        }
+                    }
+                    
+                    if (clubEvents.isEmpty()) {
+                        Text("Aucun événement club prévu.", style = MaterialTheme.typography.bodySmall, color = Color.White.copy(alpha = 0.5f))
+                    } else {
+                        clubEvents.take(3).forEach { event ->
+                            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 4.dp)) {
+                                Box(modifier = Modifier.size(8.dp).background(Color(0xFF00B4D8), CircleShape))
+                                Spacer(Modifier.width(12.dp))
+                                Column {
+                                    Text(event.title, style = MaterialTheme.typography.bodyMedium, color = Color.White, fontWeight = FontWeight.Bold)
+                                    Text("${event.date} à ${event.startTime} - ${event.location}", style = MaterialTheme.typography.labelSmall, color = Color.White.copy(alpha = 0.6f))
+                                }
+                            }
+                        }
+                    }
+                }
+            }
         }
 
         // 1. Les compositions soumises (Prêtes pour validation président) -> VERT
@@ -811,4 +891,258 @@ fun InviteCoachDialog(
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Annuler") } }
     )
+}
+
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
+@Composable
+fun AddClubEventDialog(
+    collectifs: List<CollectifAvecDetail>,
+    onDismiss: () -> Unit,
+    onConfirm: (ClubEvent) -> Unit
+) {
+    var type by remember { mutableStateOf(ClubEventType.TOURNOI) }
+    var scope by remember { mutableStateOf(ClubEventScope.CLUB_ENTIER) }
+    var title by remember { mutableStateOf("") }
+    var location by remember { mutableStateOf("") }
+    var description by remember { mutableStateOf("") }
+    var date by remember { mutableStateOf(LocalDate.now()) }
+    var time by remember { mutableStateOf(LocalTime.of(10, 0)) }
+    
+    var showDatePicker by remember { mutableStateOf(false) }
+    var showTimePicker by remember { mutableStateOf(false) }
+
+    val selectedTeamIds = remember { mutableStateListOf<String>() }
+    val selectedCoachIds = remember { mutableStateListOf<String>() }
+
+    // Reset scope and selections if type changes
+    LaunchedEffect(type) {
+        scope = ClubEventScope.CLUB_ENTIER
+        selectedTeamIds.clear()
+        selectedCoachIds.clear()
+    }
+
+    val coaches = remember(collectifs) {
+        collectifs.flatMap { it.rattachements }
+            .distinctBy { it.coachId }
+            .filter { it.coachId.isNotEmpty() }
+    }
+
+    if (showDatePicker) {
+        val datePickerState = rememberDatePickerState(
+            initialSelectedDateMillis = date.atStartOfDay(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli()
+        )
+        DatePickerDialog(
+            onDismissRequest = { showDatePicker = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    datePickerState.selectedDateMillis?.let {
+                        date = java.time.Instant.ofEpochMilli(it).atZone(java.time.ZoneId.systemDefault()).toLocalDate()
+                    }
+                    showDatePicker = false
+                }) { Text("OK") }
+            }
+        ) { DatePicker(state = datePickerState) }
+    }
+
+    if (showTimePicker) {
+        val timePickerState = rememberTimePickerState(
+            initialHour = time.hour,
+            initialMinute = time.minute,
+            is24Hour = true
+        )
+        Dialog(onDismissRequest = { showTimePicker = false }) {
+            Card(
+                shape = RoundedCornerShape(24.dp),
+                colors = CardDefaults.cardColors(containerColor = Color(0xFF002147))
+            ) {
+                Column(
+                    modifier = Modifier.padding(24.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text("SÉLECTIONNER L'HEURE", fontWeight = FontWeight.Bold, color = Color.White)
+                    Spacer(Modifier.height(24.dp))
+                    TimePicker(state = timePickerState)
+                    Spacer(Modifier.height(24.dp))
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                        TextButton(onClick = { showTimePicker = false }) { Text("ANNULER", color = Color.White.copy(alpha = 0.6f)) }
+                        TextButton(onClick = {
+                            time = LocalTime.of(timePickerState.hour, timePickerState.minute)
+                            showTimePicker = false
+                        }) { Text("OK", color = Color(0xFF00B4D8), fontWeight = FontWeight.Bold) }
+                    }
+                }
+            }
+        }
+    }
+    
+    Dialog(onDismissRequest = onDismiss) {
+        Card(
+            shape = RoundedCornerShape(24.dp),
+            colors = CardDefaults.cardColors(containerColor = Color(0xFF002147)),
+            border = BorderStroke(0.5.dp, Color.White.copy(alpha = 0.2f))
+        ) {
+            Column(modifier = Modifier.padding(24.dp).verticalScroll(rememberScrollState())) {
+                Text("NOUVEL ÉVÉNEMENT CLUB", fontWeight = FontWeight.Black, color = Color.White, fontSize = 20.sp)
+                Spacer(Modifier.height(24.dp))
+                
+                // TYPE SWITCH
+                Row(modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp)) {
+                    ClubEventType.entries.forEach { t ->
+                        val isSel = type == t
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(36.dp)
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(if (isSel) Color(0xFF00B4D8) else Color.White.copy(alpha = 0.1f))
+                                .clickable { type = t },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(t.name.lowercase().replaceFirstChar { it.uppercase() }, color = if (isSel) Color.White else Color.White.copy(alpha = 0.6f), fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        }
+                        Spacer(Modifier.width(4.dp))
+                    }
+                }
+
+                OutlinedTextField(
+                    value = title,
+                    onValueChange = { title = it },
+                    label = { Text("Titre de l'événement") },
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = OutlinedTextFieldDefaults.colors(focusedTextColor = Color.White, unfocusedTextColor = Color.White)
+                )
+                
+                Spacer(Modifier.height(16.dp))
+
+                Row(modifier = Modifier.fillMaxWidth()) {
+                    OutlinedButton(
+                        onClick = { showDatePicker = true },
+                        modifier = Modifier.weight(1f),
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White),
+                        shape = RoundedCornerShape(12.dp),
+                        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.2f))
+                    ) {
+                        Icon(Icons.Default.CalendarToday, null, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text(date.format(DateTimeFormatter.ofPattern("dd/MM/yyyy")))
+                    }
+                    Spacer(Modifier.width(8.dp))
+                    OutlinedButton(
+                        onClick = { showTimePicker = true },
+                        modifier = Modifier.weight(1f),
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White),
+                        shape = RoundedCornerShape(12.dp),
+                        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.2f))
+                    ) {
+                        Icon(Icons.Default.AccessTime, null, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text(time.toString())
+                    }
+                }
+
+                Spacer(Modifier.height(16.dp))
+
+                OutlinedTextField(
+                    value = location,
+                    onValueChange = { location = it },
+                    label = { Text("Lieu") },
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = OutlinedTextFieldDefaults.colors(focusedTextColor = Color.White, unfocusedTextColor = Color.White)
+                )
+
+                Spacer(Modifier.height(16.dp))
+
+                // SCOPE SELECTION
+                Text("Visibilité :", color = Color.White.copy(alpha = 0.7f), fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                Spacer(Modifier.height(8.dp))
+                
+                val filteredScopes = when(type) {
+                    ClubEventType.TOURNOI -> listOf(ClubEventScope.CLUB_ENTIER, ClubEventScope.ÉQUIPES_CIBLÉES, ClubEventScope.EXTERNE_DA)
+                    ClubEventType.SOIRÉE -> listOf(ClubEventScope.CLUB_ENTIER, ClubEventScope.ÉQUIPES_CIBLÉES)
+                    ClubEventType.RÉUNION -> listOf(ClubEventScope.CLUB_ENTIER, ClubEventScope.COACHS_CIBLÉS)
+                }
+
+                filteredScopes.forEach { s ->
+                    val label = when(s) {
+                        ClubEventScope.CLUB_ENTIER -> "CLUB"
+                        ClubEventScope.ÉQUIPES_CIBLÉES -> "CATEGORIES"
+                        ClubEventScope.COACHS_CIBLÉS -> "COACHS"
+                        ClubEventScope.EXTERNE_DA -> "COMITE DA"
+                    }
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().clickable { scope = s }) {
+                        RadioButton(selected = scope == s, onClick = { scope = s }, colors = RadioButtonDefaults.colors(selectedColor = Color(0xFF00B4D8)))
+                        Text(label, color = Color.White)
+                    }
+                }
+
+                if (scope == ClubEventScope.ÉQUIPES_CIBLÉES) {
+                    Spacer(Modifier.height(8.dp))
+                    FlowRow(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        collectifs.forEach { detail ->
+                            val isSelected = selectedTeamIds.contains(detail.collectif.id)
+                            FilterChip(
+                                selected = isSelected,
+                                onClick = { if (isSelected) selectedTeamIds.remove(detail.collectif.id) else selectedTeamIds.add(detail.collectif.id) },
+                                label = { Text(detail.collectif.nom, fontSize = 10.sp) },
+                                colors = FilterChipDefaults.filterChipColors(labelColor = Color.White.copy(alpha = 0.7f), selectedLabelColor = Color.White)
+                            )
+                        }
+                    }
+                }
+
+                if (scope == ClubEventScope.COACHS_CIBLÉS) {
+                    Spacer(Modifier.height(8.dp))
+                    Column(modifier = Modifier.fillMaxWidth()) {
+                        coaches.forEach { coach ->
+                            val isSelected = selectedCoachIds.contains(coach.coachId)
+                            val name = "${coach.coachPrenom} ${coach.coachNom}"
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.fillMaxWidth().clickable {
+                                    if (isSelected) selectedCoachIds.remove(coach.coachId) else selectedCoachIds.add(coach.coachId)
+                                }
+                            ) {
+                                Checkbox(
+                                    checked = isSelected,
+                                    onCheckedChange = { if (it) selectedCoachIds.add(coach.coachId) else selectedCoachIds.remove(coach.coachId) },
+                                    colors = CheckboxDefaults.colors(checkedColor = Color(0xFF00B4D8))
+                                )
+                                Text(name, color = Color.White, fontSize = 13.sp)
+                            }
+                        }
+                    }
+                }
+
+                Spacer(Modifier.height(24.dp))
+
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                    TextButton(onClick = onDismiss) { Text("Annuler", color = Color.White.copy(alpha = 0.6f)) }
+                    Spacer(Modifier.width(12.dp))
+                    Button(
+                        onClick = {
+                            val event = ClubEvent(
+                                id = UUID.randomUUID().toString(),
+                                clubId = "", // Filled by VM
+                                title = title,
+                                type = type,
+                                scope = scope,
+                                date = date,
+                                startTime = time,
+                                location = location,
+                                description = description,
+                                targetTeamIds = selectedTeamIds.toList(),
+                                targetCoachIds = selectedCoachIds.toList()
+                            )
+                            Log.d("CLUB_EVENT", "Bouton Valider & Push appuyé : $title")
+                            onConfirm(event)
+                        },
+                        enabled = title.isNotBlank() && location.isNotBlank(),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color.White, contentColor = Color.Black)
+                    ) {
+                        Text("Valider & Push", fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+        }
+    }
 }

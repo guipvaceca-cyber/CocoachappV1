@@ -77,6 +77,7 @@ fun ConvocationSheet(
     vivierInferieur: List<JoueurVivier>,    // M13 surclassés
     slotsPersistes: List<JoueurSlot?> = emptyList(),
     bancPersiste: List<JoueurSlot?> = emptyList(),
+    isEditable: Boolean = true,
     onOuverture: () -> Unit = {},
     onSlotChange: (index: Int, type: String, joueur: JoueurSlot?) -> Unit = { _, _, _ -> },
     onSauvegarder: (principal: List<JoueurSlot?>, banc: List<JoueurSlot?>) -> Unit = { _, _ -> }
@@ -188,49 +189,56 @@ fun ConvocationSheet(
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            "Convocation $cdeCategorie",
+                            if (isEditable) "Convocation $cdeCategorie" else "Sélection $cdeCategorie",
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold
                         )
                         Text(
-                            "Sélectionne $quota joueurs",
+                            if (isEditable) "Sélectionne $quota joueurs" else "Liste des joueurs convoqués",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                     val nbPrincipal = slotsPrincipal.count { it != null }
                     
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        // Bouton Enregistrer (toujours visible)
-                        TextButton(
-                            onClick = {
-                                onSauvegarder(slotsPrincipal.toList(), slotsBanc.toList())
-                                scope.launch { sheetState.hide(); onDismiss() }
-                            },
-                            modifier = Modifier.padding(end = 8.dp)
-                        ) {
-                            Icon(Icons.Default.Save, null, modifier = Modifier.size(18.dp))
-                            Spacer(Modifier.width(4.dp))
-                            Text("Enregistrer", fontSize = 13.sp)
-                        }
+                    if (isEditable) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            // Bouton Enregistrer (toujours visible)
+                            TextButton(
+                                onClick = {
+                                    onSauvegarder(slotsPrincipal.toList(), slotsBanc.toList())
+                                    scope.launch { sheetState.hide(); onDismiss() }
+                                },
+                                modifier = Modifier.padding(end = 8.dp)
+                            ) {
+                                Icon(Icons.Default.Save, null, modifier = Modifier.size(18.dp))
+                                Spacer(Modifier.width(4.dp))
+                                Text("Enregistrer", fontSize = 13.sp)
+                            }
 
-                        // Bouton Envoyer (activé seulement si quota atteint)
-                        Button(
-                            onClick = {
-                                // Logique d'envoi final (passer en statut ENVOYÉ par ex)
-                                onSauvegarder(slotsPrincipal.toList(), slotsBanc.toList())
-                                scope.launch { sheetState.hide(); onDismiss() }
-                            },
-                            enabled = nbPrincipal == quota,
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = Color(0xFF1D9E75)
-                            ),
-                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
-                            shape = RoundedCornerShape(8.dp)
-                        ) {
-                            Icon(Icons.AutoMirrored.Filled.Send, null, modifier = Modifier.size(16.dp))
-                            Spacer(Modifier.width(6.dp))
-                            Text("Envoyer", fontSize = 13.sp)
+                            // Bouton Envoyer (activé seulement si quota atteint)
+                            Button(
+                                onClick = {
+                                    // Logique d'envoi final (passer en statut ENVOYÉ par ex)
+                                    onSauvegarder(slotsPrincipal.toList(), slotsBanc.toList())
+                                    scope.launch { sheetState.hide(); onDismiss() }
+                                },
+                                enabled = nbPrincipal == quota,
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = Color(0xFF1D9E75)
+                                ),
+                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+                                shape = RoundedCornerShape(8.dp)
+                            ) {
+                                Icon(Icons.AutoMirrored.Filled.Send, null, modifier = Modifier.size(16.dp))
+                                Spacer(Modifier.width(6.dp))
+                                Text("Envoyer", fontSize = 13.sp)
+                            }
+                        }
+                    } else {
+                        // Close button for read-only mode
+                        IconButton(onClick = { scope.launch { sheetState.hide(); onDismiss() } }) {
+                            Icon(Icons.Default.Close, null)
                         }
                     }
                 }
@@ -251,20 +259,22 @@ fun ConvocationSheet(
             }
 
             itemsIndexed(slotsPrincipal.toList()) { index, slot ->
+                val isLocked = !isEditable || slot?.statut == StatutSlot.INSCRIT || slot?.statut == StatutSlot.CONFIRME
                 SlotRow(
                     numero = index + 1,
                     slot = slot,
-                    isActive = slotActifIndex == index && slotActifType == "PRINCIPAL",
+                    isActive = isEditable && slotActifIndex == index && slotActifType == "PRINCIPAL",
                     query = if (slotActifIndex == index && slotActifType == "PRINCIPAL") queryRecherche else "",
                     onQueryChange = { queryRecherche = it },
                     onTap = {
-                        if (slot == null) {
+                        if (isEditable && slot == null) {
                             slotActifIndex = index
                             slotActifType = "PRINCIPAL"
                             queryRecherche = ""
                         }
                     },
-                    onRetirer = { retirerJoueur(index, "PRINCIPAL") }
+                    onRetirer = { retirerJoueur(index, "PRINCIPAL") },
+                    isLocked = isLocked
                 )
 
                 // Dropdown sous le slot actif
@@ -289,21 +299,23 @@ fun ConvocationSheet(
             }
 
             itemsIndexed(slotsBanc.toList()) { index, slot ->
+                val isLocked = !isEditable || slot?.statut == StatutSlot.INSCRIT || slot?.statut == StatutSlot.CONFIRME
                 SlotRow(
                     numero = index + 1,
                     slot = slot,
-                    isActive = slotActifIndex == index && slotActifType == "BANC",
+                    isActive = isEditable && slotActifIndex == index && slotActifType == "BANC",
                     query = if (slotActifIndex == index && slotActifType == "BANC") queryRecherche else "",
                     onQueryChange = { queryRecherche = it },
                     onTap = {
-                        if (slot == null) {
+                        if (isEditable && slot == null) {
                             slotActifIndex = index
                             slotActifType = "BANC"
                             queryRecherche = ""
                         }
                     },
                     onRetirer = { retirerJoueur(index, "BANC") },
-                    isBanc = true
+                    isBanc = true,
+                    isLocked = isLocked
                 )
 
                 if (slotActifIndex == index && slotActifType == "BANC" && resultats.isNotEmpty()) {
@@ -356,7 +368,8 @@ fun SlotRow(
     onQueryChange: (String) -> Unit,
     onTap: () -> Unit,
     onRetirer: () -> Unit,
-    isBanc: Boolean = false
+    isBanc: Boolean = false,
+    isLocked: Boolean = false
 ) {
     val focusRequester = remember { FocusRequester() }
 
@@ -366,6 +379,7 @@ fun SlotRow(
 
     val bgColor = when {
         isActive -> Color(0xFFE6F1FB)
+        slot?.statut == StatutSlot.INSCRIT || slot?.statut == StatutSlot.CONFIRME -> Color.LightGray.copy(alpha = 0.2f)
         slot?.statut == StatutSlot.PROMU -> Color(0xFFE1F5EE)
         slot?.statut == StatutSlot.INDISPONIBLE -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
         slot != null -> MaterialTheme.colorScheme.surface
@@ -378,7 +392,7 @@ fun SlotRow(
             .padding(vertical = 3.dp)
             .clip(RoundedCornerShape(10.dp))
             .background(bgColor)
-            .then(if (slot == null && !isActive) Modifier.clickable { onTap() } else Modifier),
+            .then(if (slot == null && !isActive && !isLocked) Modifier.clickable { onTap() } else Modifier),
         verticalAlignment = Alignment.CenterVertically
     ) {
         // Numéro
@@ -471,16 +485,25 @@ fun SlotRow(
 
                 Spacer(Modifier.width(8.dp))
 
-                // Bouton retirer
-                IconButton(
-                    onClick = onRetirer,
-                    modifier = Modifier.size(32.dp)
-                ) {
+                // Bouton retirer (caché si verrouillé)
+                if (!isLocked) {
+                    IconButton(
+                        onClick = onRetirer,
+                        modifier = Modifier.size(32.dp)
+                    ) {
+                        Icon(
+                            Icons.Default.Close,
+                            contentDescription = "Retirer",
+                            modifier = Modifier.size(14.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                } else {
                     Icon(
-                        Icons.Default.Close,
-                        contentDescription = "Retirer",
-                        modifier = Modifier.size(14.dp),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        Icons.Default.Lock,
+                        contentDescription = "Verrouillé",
+                        modifier = Modifier.size(14.dp).padding(horizontal = 8.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
                     )
                 }
             }

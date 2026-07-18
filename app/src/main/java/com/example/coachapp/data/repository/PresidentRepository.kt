@@ -1,5 +1,6 @@
 package com.example.coachapp.data.repository
 
+import com.example.coachapp.data.*
 import com.example.coachapp.data.model.*
 import com.example.coachapp.data.TrainingSchedule
 import com.example.coachapp.data.TrainingSession
@@ -13,6 +14,7 @@ import io.github.jan.supabase.postgrest.query.Order
 import kotlinx.datetime.Clock
 import kotlinx.serialization.json.*
 import java.time.DayOfWeek
+import java.time.LocalDate
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
 
@@ -476,170 +478,70 @@ class PresidentRepository(
         }
     }
 
-    suspend fun getClubPlanning(clubId: String, saison: String): List<TrainingSchedule> {
+    // --- GESTION PLANNING CLUB ---
+    // Les fonctions de planning ont été déplacées vers TrainingRepository
+
+    // --- GESTION SÉANCES (CLOUD) ---
+    // Les fonctions de synchronisation des séances ont été déplacées vers TrainingRepository
+
+    // --- CLUB EVENTS ---
+
+    suspend fun pushClubEvent(event: ClubEvent): Result<Unit> {
         return try {
-            val response = supabase.from("collectif_planning")
+            val data = buildJsonObject {
+                put("id", event.id)
+                put("club_id", event.clubId)
+                put("titre", event.title)
+                put("type", event.type.name)
+                put("scope", event.scope.name)
+                put("date_event", event.date.toString())
+                put("heure_debut", event.startTime.toString())
+                put("lieu", event.location)
+                put("description", event.description)
+                put("target_teams", JsonArray(event.targetTeamIds.map { JsonPrimitive(it) }))
+                put("target_coaches", JsonArray(event.targetCoachIds.map { JsonPrimitive(it) }))
+                put("is_external_da", event.isExternalDA)
+                put("registration_link", event.registrationLink)
+            }
+            android.util.Log.d("PRESIDENT_REPO", "Pushing Club Event: $data")
+            supabase.from("club_events").upsert(data)
+            Result.success(Unit)
+        } catch (e: Exception) {
+            android.util.Log.e("PRESIDENT_REPO", "Error pushing club event", e)
+            Result.failure(e)
+        }
+    }
+
+    suspend fun getClubEvents(clubId: String): List<ClubEvent> {
+        return try {
+            val response = supabase.from("club_events")
                 .select {
                     filter {
                         eq("club_id", clubId)
-                        eq("saison", saison)
                     }
                 }
             val rows = json.decodeFromString<List<JsonObject>>(response.data)
-            rows.map { it.toTrainingSchedule() }
+            rows.map { it.toClubEvent() }
         } catch (e: Exception) {
             emptyList()
         }
     }
 
-    suspend fun upsertPlanning(schedule: TrainingSchedule): Result<Unit> {
-        return try {
-            val data = buildJsonObject {
-                if (schedule.id != null) put("id", schedule.id)
-                put("collectif_id", schedule.teamId)
-                put("club_id", schedule.clubId)
-                put("jour_semaine", schedule.dayOfWeek.value)
-                put("heure_debut", schedule.startTime.toString())
-                put("duree_minutes", schedule.durationMinutes)
-                put("terrain", schedule.terrain)
-                put("saison", "2026-2027") 
-            }
-            supabase.from("collectif_planning").upsert(data)
-            Result.success(Unit)
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
-    }
-
-    suspend fun supprimerPlanning(scheduleId: String): Result<Unit> {
-        return try {
-            supabase.from("collectif_planning").delete {
-                filter { eq("id", scheduleId) }
-            }
-            Result.success(Unit)
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
-    }
-
-    suspend fun pushSession(session: TrainingSession, clubId: String, saison: String): Result<Unit> {
-        return try {
-            val userId = supabase.auth.currentUserOrNull()?.id ?: ""
-            
-            // 1. On pousse la fiche technique complète (Coach uniquement)
-            val dataTechnique = buildJsonObject {
-                put("id", session.id)
-                put("collectif_id", session.teamId)
-                put("date_seance", session.date.toString())
-                put("saison", saison)
-                put("warmup", session.warmup)
-                put("drills", session.drills)
-                put("situations", session.smallGroupSituations)
-                put("collective_game", session.collectiveGame)
-                put("coach_intentions", session.coachIntentions)
-            }
-            supabase.from("collectif_seances").upsert(dataTechnique)
-
-            // 2. On pousse la séance publique (Visible par les joueurs)
-            // Alignement avec la table 'seance' : id, collectif_id, coach_id, titre, date_heure, duree_minutes, lieu, type, statut, note_coach
-            val dataPublique = buildJsonObject {
-                put("id", session.id)
-                put("collectif_id", session.teamId)
-                put("coach_id", userId)
-                put("titre", session.focusArea ?: "Séance sans thème")
-                put("date_heure", "${session.date}T${session.startTime}")
-                put("duree_minutes", session.durationMinutes)
-                put("lieu", session.terrain ?: "Terrain 1")
-                put("type", "entrainement")
-                put("statut", "planifie")
-                put("note_coach", session.coachNotes ?: "")
-            }
-            supabase.from("seance").upsert(dataPublique)
-
-            if (session.isValidated) {
-                convoquerJoueurs(session.id, session.teamId)
-            }
-
-            Result.success(Unit)
-        } catch (e: Exception) {
-            android.util.Log.e("PUSH_SESSION", "Erreur: ${e.message}", e)
-            Result.failure(e)
-        }
-    }
-
-    suspend fun fetchSessionPresences(sessionId: String): Map<Long, String> {
-        return try {
-            val response = supabase.from("coplayer_presence")
-                .select(Columns.raw("status, player_id, coplayer_profil(vivier_id)")) {
-                    filter { eq("session_id", sessionId) }
-                }
-            val rows = json.decodeFromString<List<JsonObject>>(response.data)
-            rows.associate { row ->
-                val status = row.getStr("status")?.lowercase() ?: "pending"
-                val profile = row["coplayer_profil"] as? JsonObject
-                val vivierId = profile?.get("vivier_id")?.jsonPrimitive?.longOrNull ?: -1L
-                vivierId to status
-            }.filterKeys { it != -1L }
-        } catch (e: Exception) {
-            android.util.Log.e("PRESIDENT_REPO", "Erreur fetchSessionPresences", e)
-            emptyMap()
-        }
-    }
-
-    private suspend fun convoquerJoueurs(sessionId: String, collectifId: String) {
-        try {
-            val joueurs = getJoueursCollectif(collectifId)
-            val vivierIds = joueurs.filter { it.source == "vivier" }.mapNotNull { it.vivierJoueurId }
-            if (vivierIds.isEmpty()) return
-
-            val profilesResponse = supabase.from("coplayer_profil")
-                .select { filter { isIn("vivier_id", vivierIds) } }
-            
-            val profiles = json.decodeFromString<List<JsonObject>>(profilesResponse.data)
-            val playerIds = profiles.mapNotNull { it.getStr("id") }
-
-            val presences = playerIds.map { playerId ->
-                buildJsonObject {
-                    put("session_id", sessionId)
-                    put("player_id", playerId)
-                    put("status", "PENDING")
-                }
-            }
-            
-            if (presences.isNotEmpty()) {
-                // ignoreDuplicates = true permet de NE PAS écraser les réponses (Présent/Absent) déjà faites par les joueurs
-                supabase.from("coplayer_presence").upsert(presences, ignoreDuplicates = true)
-            }
-        } catch (e: Exception) {
-            android.util.Log.e("PRESIDENT_REPO", "Erreur convocation automatique", e)
-        }
-    }
-
-    suspend fun pushMatch(event: CompetitionEvent, clubId: String, saison: String): Result<Unit> {
-        return try {
-            val userId = supabase.auth.currentUserOrNull()?.id ?: ""
-            val data = buildJsonObject {
-                put("id", event.id)
-                put("collectif_id", event.teamId)
-                put("club_id", clubId)
-                put("date_match", event.date.toString())
-                put("heure_debut", event.startTime.toString())
-                put("adversaire", event.opponent)
-                put("lieu", event.location)
-                put("type_match", event.type.label)
-                val attendanceJson = buildJsonObject {
-                    event.attendance.forEach { (k, v) -> put(k, v) }
-                }
-                put("attendance", attendanceJson)
-                put("saison", saison)
-                put("created_by", userId)
-            }
-            supabase.from("collectif_matchs").upsert(data)
-            Result.success(Unit)
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
-    }
+    private fun JsonObject.toClubEvent() = ClubEvent(
+        id = getStr("id") ?: "",
+        clubId = getStr("club_id") ?: "",
+        title = getStr("titre") ?: "",
+        type = ClubEventType.valueOf(getStr("type") ?: "TOURNOI"),
+        scope = ClubEventScope.valueOf(getStr("scope") ?: "CLUB_ENTIER"),
+        date = LocalDate.parse(getStr("date_event")),
+        startTime = LocalTime.parse(getStr("heure_debut")),
+        location = getStr("lieu") ?: "",
+        description = getStr("description") ?: "",
+        targetTeamIds = this["target_teams"]?.jsonArray?.map { it.jsonPrimitive.content } ?: emptyList(),
+        targetCoachIds = this["target_coaches"]?.jsonArray?.map { it.jsonPrimitive.content } ?: emptyList(),
+        isExternalDA = this["is_external_da"]?.jsonPrimitive?.boolean ?: false,
+        registrationLink = getStr("registration_link")
+    )
 
     private fun JsonObject.toTrainingSchedule() = TrainingSchedule(
         id = getStr("id"),

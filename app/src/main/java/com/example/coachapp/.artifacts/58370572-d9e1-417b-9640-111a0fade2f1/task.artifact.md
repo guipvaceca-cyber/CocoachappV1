@@ -1,0 +1,3 @@
+- [ ] Update `ReadySessionCard` in `DashboardScreen.kt` to use team color as background
+- [ ] Verify build
+- [ ] Create walkthrough
