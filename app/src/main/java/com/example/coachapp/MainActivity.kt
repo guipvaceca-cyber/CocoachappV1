@@ -28,6 +28,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.unit.LayoutDirection
 import com.example.coachapp.data.*
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.coachapp.ui.CoachViewModel
@@ -224,7 +225,11 @@ fun CoachAppApp(viewModel: CoachViewModel = viewModel()) {
                 modifier = Modifier.fillMaxSize(),
                 containerColor = Color(0xFF001529)
             ) { innerPadding ->
-                val modifier = Modifier.padding(innerPadding)
+                val modifier = Modifier.padding(
+                    start = innerPadding.calculateStartPadding(LayoutDirection.Ltr),
+                    end = innerPadding.calculateEndPadding(LayoutDirection.Ltr),
+                    bottom = innerPadding.calculateBottomPadding()
+                )
                 
                 if (viewModel.selectedResource != null) {
                     BackHandler { viewModel.clearSelectedResource() }

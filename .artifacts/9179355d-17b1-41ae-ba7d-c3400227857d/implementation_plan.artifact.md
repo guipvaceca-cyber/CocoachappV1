@@ -1,39 +1,37 @@
-# Plan d'Optimisation Visuelle du Dashboard (Version Corrigée)
+# Plan d'Amélioration du Spider Chart (Radar Chart)
 
-Ce plan vise à élever la qualité visuelle de l'écran d'accueil (`DashboardScreen`) en affinant les effets de "glassmorphism", en améliorant la hiérarchie visuelle et en ajoutant des micro-interactions.
+Ce plan vise à rendre l'analyse de compétences plus lisible, esthétique et riche en informations, en passant d'un graphique simple à un véritable outil de pilotage.
 
-## Changements Proposés
+## 1. Améliorations Graphiques ("Pimp")
 
-### 1. Fond d'Écran
-- **Décision** : Le fond bleu uni actuel (`Color(0xFF001529)`) est conservé tel quel selon la demande utilisateur.
+### Lisibilité et Contraste
+- **Labels Lumineux** : Passer les intitulés en blanc éclatant (`Color.White`) avec une légère ombre portée pour qu'ils ressortent sur le fond bleu nuit.
+- **Grille "Glass"** : Utiliser des lignes blanches très fines à opacité variable (`0.1f` à `0.3f`) pour la grille de fond, renforçant l'aspect technologique.
 
-### 2. Raffinement du Glassmorphism
-- **Bordures Lumineuses** : Appliquer une bordure plus fine (`0.5.dp`) avec un blanc très transparent mais plus contrasté sur les bords supérieurs pour simuler le reflet du verre.
-- **Cohérence des Formes** : Harmoniser les rayons de courbure (`RoundedCornerShape`) à 24.dp pour les sections majeures (ContextualCard) et 16.dp ou 20.dp pour les éléments secondaires.
+### Esthétique "Premium"
+- **Zones Dégradées** : Remplacer les aplats de couleur par des dégradés radiaux ou linéaires (`Brush`) pour donner du volume aux surfaces de score.
+- **Points de Données (Markers)** : Ajouter des petits cercles lumineux à chaque sommet des polygones pour marquer précisément les scores.
+- **Animations Avancées** : Faire "pousser" les branches du radar depuis le centre au chargement avec un effet d'élasticité.
 
-### 3. Carte Contextuelle Dynamique
-- **Effet de "Glow" Subtil** : Ajouter une lueur interne légère (`Box` avec ombre ou dégradé) qui change de couleur selon l'état (ex: lueur rouge pour le mode "FIELD").
-- **Transitions Fluides** : Utiliser `animateColorAsState` pour que le passage d'un état à l'autre (ex: PREP vers FIELD) se fasse via un fondu de couleur élégant.
+## 2. Améliorations Conceptuelles
 
-### 4. Grille de Modules Modernisée
-- **Aura d'Icône** : Ajouter un dégradé radial très doux derrière chaque icône de module pour lui donner du relief par rapport à la carte.
-- **Micro-interactions** : Ajouter un effet de feedback visuel (légère réduction de taille au clic) sur les `ModuleCard`.
+### Comparaison Augmentée
+- **Zone Cible (Target)** : Afficher en pointillé très discret un profil "Coach Expert" (score de 4.5/5 partout) pour situer ses marges de progression.
+- **Légende Interactive** : Ajouter une légende claire en bas du graphique : "Flash (Bleu) - Diagnostic de séance" vs "Global (Violet) - Équilibre de carrière".
 
-### 5. Titres de Section et Hiérarchie
-- **Accents Visuels** : Accompagner chaque titre de section d'une petite barre verticale de couleur d'accent (VolleyBlueLight ou Cyan) à gauche du texte.
-- **Typographie** : Uniformiser les styles pour une meilleure lisibilité.
+### Données Contextuelles
+- **Scores chiffrés** : Afficher le score moyen à côté de chaque label (ex: "Technique (4.2)").
 
 ## Fichiers à Modifier
 
-#### [MODIFY] [DashboardScreen.kt](file:///C:/Users/guip3/AndroidStudioProjects/CoachApp/app/src/main/java/com/example/coachapp/ui/screens/DashboardScreen.kt)
-- Mise à jour de `ModuleCard` (aura, interactions).
-- Refonte de `ContextualCard` (animations, glow).
-- Ajout d'un composant `SectionHeader` réutilisable.
-- Raffinement global des styles de `Card`.
+#### [MODIFY] [RadarChart.kt](file:///C:/Users/guip3/AndroidStudioProjects/CoachApp/app/src/main/java/com/example/coachapp/ui/components/RadarChart.kt)
+- Refonte complète de la fonction `Canvas`.
+- Implémentation des nouvelles animations et dégradés.
+- Correction des couleurs de texte.
 
 ## Plan de Vérification
 
 ### Vérification Manuelle
-- Déploiement sur appareil pour valider les contrastes.
-- Test des transitions d'état du dashboard.
-- Vérification du feedback tactile sur les modules.
+- Vérifier la lisibilité des textes sur fond sombre.
+- Valider la fluidité de l'animation au déploiement de la carte.
+- S'assurer que les deux couches (Flash/Global) sont bien distinctes.

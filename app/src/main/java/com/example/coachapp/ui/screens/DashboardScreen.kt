@@ -145,6 +145,31 @@ fun DashboardScreen(
         }
 
         item {
+            SectionHeader(title = "PÔLES DE COMPÉTENCES")
+        }
+
+        // Grille de modules
+        item {
+            val modules = getMainPoles()
+            Column(modifier = Modifier.padding(horizontal = 16.dp)) {
+                modules.chunked(2).forEach { rowModules ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        rowModules.forEach { item ->
+                            ModuleCard(item, modifier = Modifier.weight(1f), onClick = { onNavigate(item.id) })
+                        }
+                        if (rowModules.size == 1) {
+                            Spacer(modifier = Modifier.weight(1f))
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(12.dp))
+                }
+            }
+        }
+
+        item {
             Card(
                 modifier = Modifier.padding(16.dp).fillMaxWidth(),
                 shape = RoundedCornerShape(24.dp),
@@ -183,31 +208,6 @@ fun DashboardScreen(
                             }
                         }
                     }
-                }
-            }
-        }
-
-        item {
-            SectionHeader(title = "PÔLES DE COMPÉTENCES")
-        }
-
-        // Grille de modules
-        item {
-            val modules = getMainPoles()
-            Column(modifier = Modifier.padding(horizontal = 16.dp)) {
-                modules.chunked(2).forEach { rowModules ->
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        rowModules.forEach { item ->
-                            ModuleCard(item, modifier = Modifier.weight(1f), onClick = { onNavigate(item.id) })
-                        }
-                        if (rowModules.size == 1) {
-                            Spacer(modifier = Modifier.weight(1f))
-                        }
-                    }
-                    Spacer(modifier = Modifier.height(12.dp))
                 }
             }
         }
@@ -484,112 +484,94 @@ enum class AppUpdateStatus { UP_TO_DATE, UPDATE_AVAILABLE }
 fun HeaderSection() {
     val updateStatus = AppUpdateStatus.UP_TO_DATE // Mock status
 
-    Column(modifier = Modifier.fillMaxWidth()) {
-        // Top Section: Comite Logo on Global Background
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(100.dp) 
-                .background(Color(0xFF001529)), // Same as global background
-            contentAlignment = Alignment.Center
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            // --- REGLAGE: Espacement autour du Header (top=0.dp pour coller au haut) ---
+            .padding(start = 16.dp, end = 16.dp, top = 0.dp, bottom = 12.dp)
+    ) {
+        Surface(
+            // --- REGLAGE: Hauteur totale du bandeau Header ---
+            modifier = Modifier.fillMaxWidth().height(130.dp),
+            color = Color.White.copy(alpha = 0.08f),
+            shape = RoundedCornerShape(20.dp),
+            border = BorderStroke(0.5.dp, Color.White.copy(alpha = 0.15f))
         ) {
-            Image(
-                painter = painterResource(id = R.drawable.comitda),
-                contentDescription = "Comité Logo",
-                modifier = Modifier.height(65.dp), // Reduced size by ~15%
-                contentScale = ContentScale.Fit
-            )
-        }
-
-        // Bottom Section: CoCoach Info
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp)
-        ) {
-            Surface(
-                modifier = Modifier.fillMaxWidth().height(80.dp),
-                color = Color.White.copy(alpha = 0.08f),
-                shape = RoundedCornerShape(20.dp),
-                border = BorderStroke(0.5.dp, Color.White.copy(alpha = 0.15f))
+            Row(
+                modifier = Modifier.fillMaxSize().padding(horizontal = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                Row(
-                    modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Surface(
-                            modifier = Modifier.size(48.dp),
-                            shape = RoundedCornerShape(12.dp),
-                            color = Color.Transparent
-                        ) {
-                            Image(
-                                painter = painterResource(id = R.drawable.ic_cocoach_logo),
-                                contentDescription = "Logo",
-                                modifier = Modifier.fillMaxSize(),
-                                contentScale = ContentScale.Fit
-                            )
-                        }
-                        Spacer(Modifier.width(12.dp))
-                        Column {
-                            Row(verticalAlignment = Alignment.Bottom) {
-                                Text(
-                                    text = "CoCoach",
-                                    color = Color.White,
-                                    fontWeight = FontWeight.Black,
-                                    fontSize = 22.sp,
-                                    letterSpacing = (-0.5).sp
-                                )
-                                Spacer(Modifier.width(6.dp))
-                                Text(
-                                    text = "v0.4-RC",
-                                    color = Color.White.copy(alpha = 0.6f),
-                                    fontSize = 10.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    modifier = Modifier.padding(bottom = 4.dp)
-                                )
-                                Spacer(Modifier.width(8.dp))
-                                // App Update Status
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    modifier = Modifier.padding(bottom = 4.dp)
-                                ) {
-                                    val (label, color, icon) = when (updateStatus) {
-                                        AppUpdateStatus.UP_TO_DATE -> Triple(
-                                            "À JOUR",
-                                            Color(0xFF2196F3), // Blue
-                                            Icons.Default.Verified
-                                        )
-                                        AppUpdateStatus.UPDATE_AVAILABLE -> Triple(
-                                            "MAJ DISPO",
-                                            Color(0xFFFF9800), // Orange
-                                            Icons.Default.ArrowCircleUp
-                                        )
-                                    }
-                                    
-                                    Icon(
-                                        imageVector = icon,
-                                        contentDescription = null,
-                                        tint = color,
-                                        modifier = Modifier.size(12.dp)
-                                    )
-                                    Spacer(Modifier.width(4.dp))
-                                    Text(
-                                        text = label,
-                                        color = color,
-                                        fontSize = 8.sp,
-                                        fontWeight = FontWeight.Black
-                                    )
-                                }
-                            }
+                // Left Part: CoCoach Logo & Info
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                    Surface(
+                        // --- REGLAGE: Taille du cadre du logo CoCoach ---
+                        modifier = Modifier.size(75.dp),
+                        shape = RoundedCornerShape(12.dp),
+                        color = Color.White.copy(alpha = 0.1f)
+                    ) {
+                        Image(
+                            painter = painterResource(id = R.drawable.ic_cocoach_logo),
+                            contentDescription = "CoCoach Logo",
+                            // --- REGLAGE: Marge interne du logo (0.dp pour remplissage total) ---
+                            modifier = Modifier.fillMaxSize().padding(0.dp),
+                            contentScale = ContentScale.Fit
+                        )
+                    }
+                    Spacer(Modifier.width(10.dp))
+                    Column {
+                        Row(verticalAlignment = Alignment.Bottom) {
                             Text(
-                                text = "Drôme Ardèche Volley Connect",
-                                color = Color(0xFF00B4D8),
+                                text = "CoCoach",
+                                color = Color.White,
+                                fontWeight = FontWeight.Black,
+                                fontSize = 22.sp,
+                                letterSpacing = (-0.5).sp
+                            )
+                            Spacer(Modifier.width(4.dp))
+                            Text(
+                                text = "v0.4",
+                                color = Color.White.copy(alpha = 0.5f),
+                                fontSize = 10.sp,
                                 fontWeight = FontWeight.Bold,
-                                fontSize = 11.sp
+                                modifier = Modifier.padding(bottom = 2.dp)
                             )
                         }
+                        Text(
+                            text = "VolleyConnect",
+                            color = Color(0xFF00B4D8),
+                            fontWeight = FontWeight.Black,
+                            fontSize = 14.sp,
+                            letterSpacing = 0.5.sp
+                        )
+                        Text(
+                            text = "Drôme Ardèche",
+                            color = Color.White.copy(alpha = 0.7f),
+                            fontWeight = FontWeight.Medium,
+                            fontSize = 11.sp
+                        )
+                    }
+                }
+
+                // Right Part: Comité/FFVolley Logo
+                Column(horizontalAlignment = Alignment.End) {
+                    Image(
+                        painter = painterResource(id = R.drawable.comitda),
+                        contentDescription = "Comité Logo",
+                        // --- REGLAGE: Dimensions du logo Comité ---
+                        modifier = Modifier.height(65.dp).width(105.dp),
+                        contentScale = ContentScale.Fit
+                    )
+                    Spacer(Modifier.height(2.dp))
+                    // App Update Status (discretely integrated)
+                    val (label, color, icon) = when (updateStatus) {
+                        AppUpdateStatus.UP_TO_DATE -> Triple("À JOUR", Color(0xFF4CAF50), Icons.Default.Verified)
+                        AppUpdateStatus.UPDATE_AVAILABLE -> Triple("MAJ", Color(0xFFFF9800), Icons.Default.ArrowCircleUp)
+                    }
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(icon, null, tint = color.copy(alpha = 0.8f), modifier = Modifier.size(10.dp))
+                        Spacer(Modifier.width(3.dp))
+                        Text(label, color = color.copy(alpha = 0.8f), fontSize = 8.sp, fontWeight = FontWeight.Black)
                     }
                 }
             }
