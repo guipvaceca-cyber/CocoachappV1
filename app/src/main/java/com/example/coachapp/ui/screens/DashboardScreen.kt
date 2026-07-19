@@ -9,6 +9,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.GridCells
@@ -271,19 +272,26 @@ fun TeamSessionStack(team: Team?, sessions: List<TrainingSession>, onSessionClic
                         }
                     }
                 )
-            }
-        }
-        
-        // Count indicator if more than 3 sessions
-        if (sessions.size > 1) {
-            Surface(
-                modifier = Modifier.align(Alignment.BottomEnd).offset(x = 10.dp, y = 10.dp).size(24.dp),
-                shape = CircleShape,
-                color = MaterialTheme.colorScheme.primary,
-                shadowElevation = 4.dp
-            ) {
-                Box(contentAlignment = Alignment.Center) {
-                    Text("${sessions.size}", fontSize = 10.sp, color = Color.White, fontWeight = FontWeight.Bold)
+
+                // Count indicator - attached to the top card for better positioning
+                if (isTop && sessions.size > 1) {
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .offset(x = 8.dp, y = (-8).dp)
+                            .size(26.dp)
+                            .background(Color.White.copy(alpha = 0.2f), CircleShape)
+                            .border(0.5.dp, Color.White.copy(alpha = 0.4f), CircleShape)
+                            .zIndex(100f),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "${sessions.size}", 
+                            fontSize = 12.sp, 
+                            color = Color.White, 
+                            fontWeight = FontWeight.ExtraBold
+                        )
+                    }
                 }
             }
         }

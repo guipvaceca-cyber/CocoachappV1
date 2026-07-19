@@ -1,5 +1,6 @@
 package com.example.coachapp.ui.screens
 
+import android.media.MediaPlayer
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.Canvas
@@ -24,10 +25,12 @@ import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.coachapp.R
 import com.example.coachapp.data.*
 import com.example.coachapp.ui.components.ScoreColumn
 import com.example.coachapp.ui.components.TacticalBoardOverlay
@@ -55,6 +58,34 @@ fun MatchDashboardScreen(
     var showScorer by rememberSaveable { mutableStateOf(true) }
     var showRotation by rememberSaveable { mutableStateOf(true) }
     var showTacticalBoard by remember { mutableStateOf(false) }
+
+    // --- WHISTLE SOUND LOGIC ---
+    val context = LocalContext.current
+    var whistleVolume by rememberSaveable { mutableFloatStateOf(0.5f) }
+    val mediaPlayer = remember {
+        try {
+            MediaPlayer.create(context, R.raw.whistle)
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    DisposableEffect(Unit) {
+        onDispose {
+            mediaPlayer?.release()
+        }
+    }
+
+    fun playWhistle() {
+        mediaPlayer?.let { player ->
+            player.setVolume(whistleVolume, whistleVolume)
+            if (player.isPlaying) {
+                player.pause()
+                player.seekTo(0)
+            }
+            player.start()
+        }
+    }
 
     // --- SCANNER ANIMATION STATE ---
     var showScanner by remember { mutableStateOf(true) }
@@ -172,7 +203,35 @@ fun MatchDashboardScreen(
                         if (showScorer && !showRotation) 1f 
                         else if (showScorer) 0.42f 
                         else 0.08f
-                    )
+                    ),
+                    trailingContent = {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .background(Color.White.copy(alpha = 0.1f), RoundedCornerShape(12.dp))
+                                .padding(horizontal = 4.dp)
+                                .clickable(enabled = false) { } 
+                        ) {
+                            Slider(
+                                value = whistleVolume,
+                                onValueChange = { whistleVolume = it },
+                                modifier = Modifier.width(60.dp),
+                                colors = SliderDefaults.colors(
+                                    thumbColor = Color(0xFF00B4D8),
+                                    activeTrackColor = Color(0xFF00B4D8),
+                                    inactiveTrackColor = Color.White.copy(alpha = 0.2f)
+                                )
+                            )
+                            IconButton(onClick = { playWhistle() }) {
+                                Icon(
+                                    imageVector = Icons.Default.Campaign, 
+                                    contentDescription = "Siffler", 
+                                    tint = Color(0xFF00B4D8),
+                                    modifier = Modifier.size(24.dp)
+                                )
+                            }
+                        }
+                    }
                 ) {
                     VolleyScorer(
                         team = selectedTeam, 
@@ -238,6 +297,7 @@ fun ExpandableSection(
     isExpanded: Boolean,
     onToggle: () -> Unit,
     modifier: Modifier = Modifier,
+    trailingContent: @Composable () -> Unit = {},
     content: @Composable () -> Unit
 ) {
     Card(
@@ -276,8 +336,10 @@ fun ExpandableSection(
                     style = MaterialTheme.typography.labelLarge, 
                     fontWeight = FontWeight.Black,
                     color = Color.White,
-                    letterSpacing = 1.sp
+                    letterSpacing = 1.sp,
+                    modifier = Modifier.weight(1f)
                 )
+                trailingContent()
             }
             if (isExpanded) {
                 Box(modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 8.dp)) {
@@ -308,7 +370,11 @@ fun VolleyScorer(
     
     val isSetFinished = (scoreA >= targetPoints || scoreB >= targetPoints) && kotlin.math.abs(scoreA - scoreB) >= 2
 
-    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center, modifier = Modifier.fillMaxSize()) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally, 
+        verticalArrangement = Arrangement.Center, 
+        modifier = Modifier.fillMaxSize()
+    ) {
         // --- Rappel des scores des sets précédents ---
         if (setsHistory.isNotEmpty()) {
             Row(

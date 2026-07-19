@@ -222,6 +222,24 @@ fun getMockSeasonConfig(): SeasonConfig {
                 drills = "Passes à 3",
                 smallGroupSituations = "4x4 défense",
                 collectiveGame = "6x6 match"
+            ),
+            TrainingSession(
+                id = "session_2",
+                teamId = teamId,
+                date = today,
+                startTime = LocalTime.of(18, 0),
+                durationMinutes = 90,
+                focusArea = "Service & Attaque",
+                isValidated = true
+            ),
+            TrainingSession(
+                id = "session_3",
+                teamId = teamId,
+                date = today,
+                startTime = LocalTime.of(19, 0),
+                durationMinutes = 90,
+                focusArea = "Bloc & Défense",
+                isValidated = true
             )
         ),
         clubEvents = listOf(

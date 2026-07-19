@@ -1,0 +1,7 @@
+- [x] Créer le dossier `res/raw`
+- [x] Ajouter les imports nécessaires dans `MatchDashboardScreen.kt`
+- [x] Implémenter la logique `MediaPlayer` et le `DisposableEffect`
+- [x] Ajouter l'interface du sifflet (Slider + Icône) dans l'en-tête de `ExpandableSection`
+- [x] Télécharger un vrai son de sifflet (`whistle.mp3`)
+- [x] Ajuster la position du sifflet (en-tête, à droite du titre)
+- [x] Vérifier la compilation et corriger les erreurs de syntaxe
