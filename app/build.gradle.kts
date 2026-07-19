@@ -18,9 +18,21 @@ android {
     }
 
     buildTypes {
+        debug {
+            applicationIdSuffix = ".debug"
+            manifestPlaceholders["appLabel"] = "CoCoach Debug"
+        }
+        create("beta") {
+            initWith(getByName("release"))
+            applicationIdSuffix = ".beta"
+            manifestPlaceholders["appLabel"] = "CoCoach Beta"
+            matchingFallbacks += listOf("release")
+            signingConfig = signingConfigs.getByName("debug")
+        }
         release {
             isMinifyEnabled = false
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            manifestPlaceholders["appLabel"] = "CoCoach"
         }
     }
     compileOptions {
