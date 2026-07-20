@@ -23,6 +23,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import coil.compose.AsyncImage
 import com.example.coachapp.data.AssessmentRecord
 import com.example.coachapp.data.SeasonConfig
 import kotlinx.coroutines.launch
@@ -81,6 +82,7 @@ fun ProfileScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
+                .statusBarsPadding()
                 .padding(16.dp)
                 .verticalScroll(rememberScrollState())
         ) {
@@ -88,6 +90,29 @@ fun ProfileScreen(
                 modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
+                // Profile Picture
+                Surface(
+                    modifier = Modifier.size(64.dp),
+                    shape = CircleShape,
+                    color = Color.White.copy(alpha = 0.1f),
+                    border = BorderStroke(1.5.dp, Color(0xFF00B4D8).copy(alpha = 0.5f))
+                ) {
+                    if (seasonConfig.coachProfile.profilePictureUri != null) {
+                        AsyncImage(
+                            model = seasonConfig.coachProfile.profilePictureUri,
+                            contentDescription = "Photo de profil",
+                            modifier = Modifier.fillMaxSize(),
+                            contentScale = androidx.compose.ui.layout.ContentScale.Crop
+                        )
+                    } else {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(Icons.Default.Person, null, tint = Color.White.copy(alpha = 0.5f), modifier = Modifier.size(32.dp))
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.width(16.dp))
+
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
                         "Mon Profil", 

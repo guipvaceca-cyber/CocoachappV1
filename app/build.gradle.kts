@@ -2,6 +2,8 @@ plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.kotlin.serialization)
+    alias(libs.plugins.google.services)
+    alias(libs.plugins.firebase.appdistribution)
 }
 android {
     namespace = "com.example.coachapp"
@@ -28,6 +30,11 @@ android {
             manifestPlaceholders["appLabel"] = "CoCoach Beta"
             matchingFallbacks += listOf("release")
             signingConfig = signingConfigs.getByName("debug")
+
+            firebaseAppDistribution {
+                artifactType = "APK"
+                // Vous pouvez ajouter releaseNotes = "Version beta" ou testerGroups = "beta-testers"
+            }
         }
         release {
             isMinifyEnabled = false
@@ -73,6 +80,9 @@ dependencies {
 
     // QR Code
     implementation("com.google.zxing:core:3.5.3")
+
+    // Coil
+    implementation("io.coil-kt:coil-compose:2.6.0")
 
     testImplementation(libs.junit)
     androidTestImplementation(platform(libs.androidx.compose.bom))

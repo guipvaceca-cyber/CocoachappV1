@@ -53,6 +53,7 @@ data class CoachProfile(
     val goalCollective: String = "",
     val goal3Years: String = "",
     @SerialName("persona") val coachPersona: String = "", // e.g., "Le Tacticien", "Le Pédagogue", "Le Leader"
+    val profilePictureUri: String? = null,
     val role: UserRole = UserRole.USER
 )
 

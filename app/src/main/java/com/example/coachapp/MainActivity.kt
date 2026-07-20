@@ -228,6 +228,7 @@ fun CoachAppApp(viewModel: CoachViewModel = viewModel()) {
                 val modifier = Modifier.padding(
                     start = innerPadding.calculateStartPadding(LayoutDirection.Ltr),
                     end = innerPadding.calculateEndPadding(LayoutDirection.Ltr),
+                    top = innerPadding.calculateTopPadding(),
                     bottom = innerPadding.calculateBottomPadding()
                 )
                 

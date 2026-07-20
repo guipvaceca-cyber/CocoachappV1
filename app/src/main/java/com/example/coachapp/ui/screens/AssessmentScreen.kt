@@ -34,7 +34,7 @@ fun AssessmentScreen(
     var isProcessingAI by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
 
-    Column(modifier = modifier.padding(16.dp)) {
+    Column(modifier = modifier.fillMaxSize().padding(16.dp)) {
         Text(
             text = if (type == AssessmentType.FLASH) "Diagnostic Flash" else "Bilan de Compétences",
             style = MaterialTheme.typography.headlineMedium,

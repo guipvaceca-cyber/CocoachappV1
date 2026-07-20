@@ -38,6 +38,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
+import coil.compose.AsyncImage
 import com.example.coachapp.R
 import com.example.coachapp.data.*
 import com.example.coachapp.data.SeasonConfig
@@ -98,9 +99,8 @@ fun DashboardScreen(
         modifier = modifier
             .fillMaxSize()
             .background(Color(0xFF001529)) // Solid Deep Dark Blue
-            .statusBarsPadding()
     ) {
-        item { HeaderSection() }
+        item { HeaderSection(profile = seasonConfig.coachProfile) }
 
         item {
             ContextualCard(state = contextState, session = todaysTraining, onNavigate = onNavigate)
@@ -489,7 +489,7 @@ fun ContextualCard(state: DashboardState, session: TrainingSession?, onNavigate:
 enum class AppUpdateStatus { UP_TO_DATE, UPDATE_AVAILABLE }
 
 @Composable
-fun HeaderSection() {
+fun HeaderSection(profile: CoachProfile) {
     val updateStatus = AppUpdateStatus.UP_TO_DATE // Mock status
 
     Box(
@@ -516,15 +516,25 @@ fun HeaderSection() {
                         // --- REGLAGE: Taille du cadre du logo CoCoach ---
                         modifier = Modifier.size(75.dp),
                         shape = RoundedCornerShape(12.dp),
-                        color = Color.White.copy(alpha = 0.1f)
+                        color = Color.White.copy(alpha = 0.1f),
+                        border = if (profile.profilePictureUri != null) BorderStroke(1.5.dp, Color(0xFF00B4D8).copy(alpha = 0.5f)) else null
                     ) {
-                        Image(
-                            painter = painterResource(id = R.drawable.ic_cocoach_logo),
-                            contentDescription = "CoCoach Logo",
-                            // --- REGLAGE: Marge interne du logo (0.dp pour remplissage total) ---
-                            modifier = Modifier.fillMaxSize().padding(0.dp),
-                            contentScale = ContentScale.Fit
-                        )
+                        if (profile.profilePictureUri != null) {
+                            AsyncImage(
+                                model = profile.profilePictureUri,
+                                contentDescription = "Ma photo",
+                                modifier = Modifier.fillMaxSize(),
+                                contentScale = ContentScale.Crop
+                            )
+                        } else {
+                            Image(
+                                painter = painterResource(id = R.drawable.ic_cocoach_logo),
+                                contentDescription = "CoCoach Logo",
+                                // --- REGLAGE: Marge interne du logo (0.dp pour remplissage total) ---
+                                modifier = Modifier.fillMaxSize().padding(0.dp),
+                                contentScale = ContentScale.Fit
+                            )
+                        }
                     }
                     Spacer(Modifier.width(10.dp))
                     Column {
@@ -546,7 +556,7 @@ fun HeaderSection() {
                             )
                         }
                         Text(
-                            text = "VolleyConnect",
+                            text = profile.nickname.ifEmpty { "Coach" },
                             color = Color(0xFF00B4D8),
                             fontWeight = FontWeight.Black,
                             fontSize = 14.sp,

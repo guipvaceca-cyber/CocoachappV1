@@ -38,6 +38,7 @@ fun CoPlayerPlanningScreen(
     Column(
         modifier = modifier
             .fillMaxSize()
+            .statusBarsPadding()
             .padding(16.dp)
             .verticalScroll(rememberScrollState())
     ) {

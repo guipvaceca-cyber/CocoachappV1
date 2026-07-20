@@ -49,7 +49,8 @@ import java.util.UUID
 @Composable
 fun PresidentDashboardScreen(
     viewModel: PresidentViewModel,
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
     val uiState by viewModel.uiState.collectAsState()
     
@@ -66,6 +67,7 @@ fun PresidentDashboardScreen(
     val scope = rememberCoroutineScope()
 
     Scaffold(
+        modifier = modifier.fillMaxSize(),
         snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(

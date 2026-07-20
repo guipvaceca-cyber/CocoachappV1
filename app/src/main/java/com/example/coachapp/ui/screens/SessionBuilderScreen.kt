@@ -57,6 +57,7 @@ fun SessionBuilderScreen(
     }
 
     Scaffold(
+        modifier = modifier.fillMaxSize(),
         topBar = {
             TopAppBar(
                 title = { Text("Préparateur", fontWeight = FontWeight.Black) },

@@ -123,7 +123,7 @@ fun MatchDashboardScreen(
                 .blur(100.dp)
         )
 
-        Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
+        Column(modifier = modifier.fillMaxSize().padding(16.dp)) {
             // --- TOP COCKPIT BAR ---
             Row(
                 modifier = Modifier

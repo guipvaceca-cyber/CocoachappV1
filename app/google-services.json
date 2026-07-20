@@ -1,0 +1,48 @@
+{
+  "project_info": {
+    "project_number": "218967181212",
+    "project_id": "volley-connect-a2704",
+    "storage_bucket": "volley-connect-a2704.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:218967181212:android:7372d70b676ba6011cea59",
+        "android_client_info": {
+          "package_name": "com.example.coachapp.beta"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDYKUth3PBedhigxg9NREfnB3EI8xrnjKM"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:218967181212:android:ba05d83a1152e72d1cea59",
+        "android_client_info": {
+          "package_name": "com.example.coplayer.beta"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDYKUth3PBedhigxg9NREfnB3EI8xrnjKM"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
