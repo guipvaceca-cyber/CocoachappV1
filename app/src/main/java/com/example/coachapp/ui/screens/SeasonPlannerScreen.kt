@@ -75,11 +75,8 @@ fun SeasonPlannerView(
     var showAddCycle by remember { mutableStateOf(false) }
     var cycleAEditer by remember { mutableStateOf<SeasonCycle?>(null) }
 
-    val debutSaison = remember { 
-        LocalDate.of(LocalDate.now().year, 9, 1)
-            .let { if (LocalDate.now().monthValue < 9) it.minusYears(1) else it } 
-    }
-    val finSaison = remember { debutSaison.plusMonths(10) }
+    val debutSaison = config.seasonStart
+    val finSaison = config.seasonEnd
 
     val semaines = remember(debutSaison, finSaison) {
         val list = mutableListOf<LocalDate>()
@@ -353,6 +350,43 @@ fun CycleDialog(
     var dateFin by remember { mutableStateOf(cycle?.dateFin ?: LocalDate.now().plusWeeks(3)) }
     var notes by remember { mutableStateOf(cycle?.notes ?: "") }
 
+    var showStartPicker by remember { mutableStateOf(false) }
+    var showEndPicker by remember { mutableStateOf(false) }
+
+    if (showStartPicker) {
+        val datePickerState = rememberDatePickerState(
+            initialSelectedDateMillis = dateDebut.atStartOfDay(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli()
+        )
+        DatePickerDialog(
+            onDismissRequest = { showStartPicker = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    datePickerState.selectedDateMillis?.let {
+                        dateDebut = java.time.Instant.ofEpochMilli(it).atZone(java.time.ZoneId.systemDefault()).toLocalDate()
+                    }
+                    showStartPicker = false
+                }) { Text("OK") }
+            }
+        ) { DatePicker(state = datePickerState) }
+    }
+
+    if (showEndPicker) {
+        val datePickerState = rememberDatePickerState(
+            initialSelectedDateMillis = dateFin.atStartOfDay(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli()
+        )
+        DatePickerDialog(
+            onDismissRequest = { showEndPicker = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    datePickerState.selectedDateMillis?.let {
+                        dateFin = java.time.Instant.ofEpochMilli(it).atZone(java.time.ZoneId.systemDefault()).toLocalDate()
+                    }
+                    showEndPicker = false
+                }) { Text("OK") }
+            }
+        ) { DatePicker(state = datePickerState) }
+    }
+
     Dialog(onDismissRequest = onDismiss) {
         Card(
             shape = RoundedCornerShape(28.dp),
@@ -375,6 +409,43 @@ fun CycleDialog(
                     modifier = Modifier.fillMaxWidth(),
                     colors = OutlinedTextFieldDefaults.colors(focusedTextColor = Color.White, unfocusedTextColor = Color.White, focusedBorderColor = Color(0xFF00B4D8), unfocusedBorderColor = Color.White.copy(alpha = 0.2f))
                 )
+                Spacer(Modifier.height(20.dp))
+
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Box(modifier = Modifier.weight(1f).clickable { showStartPicker = true }) {
+                        OutlinedTextField(
+                            value = dateDebut.format(DateTimeFormatter.ofPattern("dd/MM/yy")),
+                            onValueChange = {},
+                            readOnly = true,
+                            enabled = false,
+                            label = { Text("Début", color = Color.White.copy(alpha = 0.5f)) },
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                disabledTextColor = Color.White,
+                                disabledBorderColor = Color.White.copy(alpha = 0.2f),
+                                disabledLabelColor = Color.White.copy(alpha = 0.5f),
+                                disabledPlaceholderColor = Color.White.copy(alpha = 0.5f)
+                            )
+                        )
+                    }
+                    Box(modifier = Modifier.weight(1f).clickable { showEndPicker = true }) {
+                        OutlinedTextField(
+                            value = dateFin.format(DateTimeFormatter.ofPattern("dd/MM/yy")),
+                            onValueChange = {},
+                            readOnly = true,
+                            enabled = false,
+                            label = { Text("Fin", color = Color.White.copy(alpha = 0.5f)) },
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                disabledTextColor = Color.White,
+                                disabledBorderColor = Color.White.copy(alpha = 0.2f),
+                                disabledLabelColor = Color.White.copy(alpha = 0.5f),
+                                disabledPlaceholderColor = Color.White.copy(alpha = 0.5f)
+                            )
+                        )
+                    }
+                }
+
                 Spacer(Modifier.height(20.dp))
                 Text("THÈME DU CYCLE", color = Color.White.copy(alpha = 0.7f), fontWeight = FontWeight.Black, fontSize = 12.sp)
                 Spacer(Modifier.height(12.dp))

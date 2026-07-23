@@ -21,7 +21,7 @@ android {
 
     buildTypes {
         debug {
-            applicationIdSuffix = ".debug"
+            applicationIdSuffix = ".beta"
             manifestPlaceholders["appLabel"] = "CoCoach Debug"
         }
         create("beta") {
@@ -69,13 +69,15 @@ dependencies {
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     
     // Supabase & Network
+    implementation(platform(libs.supabase.bom))
     implementation(libs.supabase.postgrest)
     implementation(libs.supabase.auth)
     implementation(libs.supabase.functions)
     implementation(libs.supabase.realtime)
     implementation(libs.ktor.client.android)
-    implementation("io.ktor:ktor-client-content-negotiation:2.3.11")
-    implementation("io.ktor:ktor-serialization-kotlinx-json:2.3.11")
+    implementation(libs.ktor.client.core)
+    implementation("io.ktor:ktor-client-content-negotiation:3.1.1")
+    implementation("io.ktor:ktor-serialization-kotlinx-json:3.1.1")
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.3")
 
     // QR Code

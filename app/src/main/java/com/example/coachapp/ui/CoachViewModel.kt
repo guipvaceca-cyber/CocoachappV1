@@ -13,9 +13,10 @@ import com.example.coachapp.data.room.AppDatabase
 import com.example.coachapp.data.room.Cycle
 import com.example.coachapp.ui.screens.SeasonCycle
 import com.example.coachapp.data.CalendrierParser
+import com.example.coachapp.data.repository.LaboRepository
 import io.github.jan.supabase.postgrest.query.Columns
-import io.github.jan.supabase.gotrue.auth
-import io.github.jan.supabase.gotrue.providers.builtin.Email
+import io.github.jan.supabase.auth.auth
+import io.github.jan.supabase.auth.providers.builtin.Email
 import androidx.compose.ui.graphics.Color
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.launchIn
@@ -29,6 +30,7 @@ import java.util.UUID
 
 class CoachViewModel(application: Application) : AndroidViewModel(application) {
     private val persistenceManager = PersistenceManager(application)
+    private val laboRepository = LaboRepository(SupabaseManager.client)
 
     // --- ROOM ---
     private val db = AppDatabase.getInstance(application)
@@ -62,6 +64,13 @@ class CoachViewModel(application: Application) : AndroidViewModel(application) {
     var selectedResource by mutableStateOf<LaboResource?>(null)
     var coachSpaceTab by mutableIntStateOf(0)
     var laboTab by mutableStateOf(LaboTab.CORPUS)
+    var laboResources by mutableStateOf<List<LaboResource>>(emptyList())
+        private set
+    var isLaboLoading by mutableStateOf(false)
+        private set
+    var laboError by mutableStateOf<String?>(null)
+        private set
+    
     var selectedTool by mutableStateOf<String?>(null)
     var selectedSessionForRecap by mutableStateOf<TrainingSession?>(null)
     var selectedSessionIdForBuilder by mutableStateOf<String?>(null)
@@ -82,7 +91,13 @@ class CoachViewModel(application: Application) : AndroidViewModel(application) {
     var slotsPersistes by mutableStateOf<List<com.example.coachapp.ui.screens.JoueurSlot?>>(emptyList())
         private set
 
+    var slotsByCategorie by mutableStateOf<Map<String, List<com.example.coachapp.ui.screens.JoueurSlot?>>>(emptyMap())
+        private set
+
     var bancPersiste by mutableStateOf<List<com.example.coachapp.ui.screens.JoueurSlot?>>(emptyList())
+        private set
+
+    var bancsByCategorie by mutableStateOf<Map<String, List<com.example.coachapp.ui.screens.JoueurSlot?>>>(emptyMap())
         private set
     var userRole by mutableStateOf(UserRole.USER)
         private set
@@ -93,6 +108,10 @@ class CoachViewModel(application: Application) : AndroidViewModel(application) {
         private set
 
     var isStageOpen by mutableStateOf(false)
+        private set
+    
+    // Status d'ouverture des stages par catégorie (clé: "CATEGORIE_SEXE")
+    var stageOpenStatuses by mutableStateOf<Map<String, Boolean>>(emptyMap())
         private set
 
     // Liste des affectations CDE (ex: M13M selection_principal, M18F selection_principal)
@@ -297,7 +316,7 @@ class CoachViewModel(application: Application) : AndroidViewModel(application) {
                 convocationEnCours = convocationId
 
                 // Charge les slots existants
-                convocationId?.let { chargerSlots(it, quota) }
+                convocationId?.let { chargerSlots(it, quota, categorie) }
 
             } catch (e: Exception) {
                 android.util.Log.e("CONVOCATION", "Erreur création/chargement", e)
@@ -305,7 +324,7 @@ class CoachViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun chargerSlots(convocationId: Long, quota: Int) {
+    fun chargerSlots(convocationId: Long, quota: Int, categorie: String? = null) {
         viewModelScope.launch(Dispatchers.IO) {
             try {
                 val response = SupabaseManager.db
@@ -340,9 +359,18 @@ class CoachViewModel(application: Application) : AndroidViewModel(application) {
                 }
 
                 withContext(Dispatchers.Main) {
-                    slotsPersistes = principal
-                    bancPersiste = banc
-                    traiterRemplacementsAutomatiques()
+                    val finalPrincipal = principal.toList()
+                    val finalBanc = banc.toList()
+                    
+                    slotsPersistes = finalPrincipal
+                    bancPersiste = finalBanc
+                    
+                    if (categorie != null) {
+                        slotsByCategorie = slotsByCategorie + (categorie to finalPrincipal)
+                        bancsByCategorie = bancsByCategorie + (categorie to finalBanc)
+                    }
+                    
+                    traiterRemplacementsAutomatiques(categorie)
                 }
             } catch (e: Exception) {
                 android.util.Log.e("CONVOCATION", "Erreur chargement slots", e)
@@ -350,7 +378,7 @@ class CoachViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    private fun traiterRemplacementsAutomatiques() {
+    private fun traiterRemplacementsAutomatiques(categorie: String? = null) {
         var aFaitUnChangement = false
         val principal = slotsPersistes.toMutableList()
         val banc = bancPersiste.toMutableList()
@@ -373,7 +401,7 @@ class CoachViewModel(application: Application) : AndroidViewModel(application) {
         }
 
         if (aFaitUnChangement) {
-            sauvegarderSelection(principal, banc)
+            sauvegarderSelection(principal, banc, categorie)
         }
         
         selectionAlerteMessage = if (alerte) "Une place titulaire est vacante et votre banc est vide !" else null
@@ -382,16 +410,26 @@ class CoachViewModel(application: Application) : AndroidViewModel(application) {
     fun sauvegarderSlot(
         index: Int,
         type: String,
-        joueur: com.example.coachapp.ui.screens.JoueurSlot?
+        joueur: com.example.coachapp.ui.screens.JoueurSlot?,
+        categorie: String? = null
     ) {
         val convId = convocationEnCours ?: return
 
         // Mise à jour locale immédiate pour la fluidité UI
-        val currentList = if (type == "PRINCIPAL") slotsPersistes else bancPersiste
-        val updatedList = currentList.toMutableList()
-        if (index in updatedList.indices) {
-            updatedList[index] = joueur
-            if (type == "PRINCIPAL") slotsPersistes = updatedList else bancPersiste = updatedList
+        if (type == "PRINCIPAL") {
+            val updatedList = slotsPersistes.toList().toMutableList()
+            if (index in updatedList.indices) {
+                updatedList[index] = joueur
+                slotsPersistes = updatedList.toList()
+                if (categorie != null) slotsByCategorie = slotsByCategorie + (categorie to updatedList.toList())
+            }
+        } else {
+            val updatedList = bancPersiste.toList().toMutableList()
+            if (index in updatedList.indices) {
+                updatedList[index] = joueur
+                bancPersiste = updatedList.toList()
+                if (categorie != null) bancsByCategorie = bancsByCategorie + (categorie to updatedList.toList())
+            }
         }
 
         viewModelScope.launch(Dispatchers.IO) {
@@ -418,7 +456,9 @@ class CoachViewModel(application: Application) : AndroidViewModel(application) {
                         "joueur_club"      to joueur.club,
                         "joueur_categorie" to joueur.categorie
                     )
-                    SupabaseManager.db.from("cde_slot").upsert(row, onConflict = "convocation_id,type_tableau,ordre")
+                    SupabaseManager.db.from("cde_slot").upsert(listOf(row)) {
+                        onConflict = "convocation_id,type_tableau,ordre"
+                    }
                 }
             } catch (e: Exception) {
                 android.util.Log.e("CONVOCATION", "Erreur sauvegarde slot", e)
@@ -428,11 +468,20 @@ class CoachViewModel(application: Application) : AndroidViewModel(application) {
 
     fun sauvegarderSelection(
         principal: List<com.example.coachapp.ui.screens.JoueurSlot?>,
-        banc: List<com.example.coachapp.ui.screens.JoueurSlot?>
+        banc: List<com.example.coachapp.ui.screens.JoueurSlot?>,
+        categorie: String? = null
     ) {
-        // Mise à jour locale immédiate
-        slotsPersistes = principal
-        bancPersiste = banc
+        // Mise à jour locale immédiate avec copies immuables
+        val principalList = principal.toList()
+        val bancList = banc.toList()
+        
+        slotsPersistes = principalList
+        bancPersiste = bancList
+        
+        if (categorie != null) {
+            slotsByCategorie = slotsByCategorie + (categorie to principalList)
+            bancsByCategorie = bancsByCategorie + (categorie to bancList)
+        }
 
         val convId = convocationEnCours ?: return
         viewModelScope.launch(Dispatchers.IO) {
@@ -473,7 +522,9 @@ class CoachViewModel(application: Application) : AndroidViewModel(application) {
                 }
 
                 if (rows.isNotEmpty()) {
-                    SupabaseManager.db.from("cde_slot").upsert(rows, onConflict = "convocation_id,type_tableau,ordre")
+                    SupabaseManager.db.from("cde_slot").upsert(rows) {
+                        onConflict = "convocation_id,type_tableau,ordre"
+                    }
                 }
                 
                 Log.d("CONVOCATION", "Sauvegarde globale réussie : ${rows.size} slots")
@@ -572,10 +623,17 @@ class CoachViewModel(application: Application) : AndroidViewModel(application) {
                     val stage = stages[0]
                     val openingDate = LocalDate.parse(stage.dateOuvertureInscription)
                     val today = LocalDate.now()
-                    isStageOpen = today.isAfter(openingDate) || today.isEqual(openingDate)
-                    Log.d("STAGE", "Stage trouvé pour $categorie $sexe : ouverture le $openingDate. isStageOpen = $isStageOpen")
+                    val isOpen = today.isAfter(openingDate) || today.isEqual(openingDate)
+                    
+                    // Update global for backward compat if needed, but primarily update map
+                    isStageOpen = isOpen
+                    val key = "${categorie}_${sexe}"
+                    stageOpenStatuses = stageOpenStatuses + (key to isOpen)
+                    
+                    Log.d("STAGE", "Stage trouvé pour $categorie $sexe : ouverture le $openingDate. isStageOpen = $isOpen")
                 } else {
-                    isStageOpen = false
+                    val key = "${categorie}_${sexe}"
+                    stageOpenStatuses = stageOpenStatuses + (key to false)
                     Log.d("STAGE", "Aucun stage trouvé pour $categorie $sexe")
                 }
             } catch (e: Exception) {
@@ -645,11 +703,45 @@ class CoachViewModel(application: Application) : AndroidViewModel(application) {
                     
                     isCoachCde = profile["is_coach_cde"]?.toString() == "true"
                     if (isCoachCde) {
-                        val cat = getStr("cde_categorie") ?: "M15"
-                        val sexe = getStr("cde_sexe") ?: "M"
-                        val role = getStr("cde_role") ?: "selection_adjoint"
-                        cdeAssignments = listOf(CdeAssignment(cat, sexe, role))
-                        checkStageOpening(cat, sexe)
+                        try {
+                            val assignmentsResponse = SupabaseManager.db.from("cde_assignments")
+                                .select { filter { eq("coach_id", user.id) } }
+                            val assignmentsJson = json.decodeFromString<List<kotlinx.serialization.json.JsonObject>>(assignmentsResponse.data)
+                            
+                            val assignments = assignmentsJson.map { adj ->
+                                val cat = adj["categorie"]?.toString()?.replace("\"", "") ?: "M15"
+                                val sexe = adj["sexe"]?.toString()?.replace("\"", "") ?: "M"
+                                val roleAdj = adj["role"]?.toString()?.replace("\"", "") ?: "selection_adjoint"
+                                
+                                // Launch check for each
+                                checkStageOpening(cat, sexe)
+                                // Charger aussi les slots pour l'affichage du Hub
+                                chargerOuRecupererSlotsPourHub(cat)
+                                
+                                CdeAssignment(cat, sexe, roleAdj)
+                            }
+                            
+                            if (assignments.isNotEmpty()) {
+                                cdeAssignments = assignments
+                            } else {
+                                // Fallback to profile columns if table is empty but flag is true
+                                val cat = getStr("cde_categorie") ?: "M15"
+                                val sexe = getStr("cde_sexe") ?: "M"
+                                val role = getStr("cde_role") ?: "selection_adjoint"
+                                cdeAssignments = listOf(CdeAssignment(cat, sexe, role))
+                                checkStageOpening(cat, sexe)
+                                chargerOuRecupererSlotsPourHub(cat)
+                            }
+                        } catch (e: Exception) {
+                            Log.e("DEBUG_ROLE", "Erreur fetch cde_assignments", e)
+                            // Fallback
+                            val cat = getStr("cde_categorie") ?: "M15"
+                            val sexe = getStr("cde_sexe") ?: "M"
+                            val role = getStr("cde_role") ?: "selection_adjoint"
+                            cdeAssignments = listOf(CdeAssignment(cat, sexe, role))
+                            checkStageOpening(cat, sexe)
+                            chargerOuRecupererSlotsPourHub(cat)
+                        }
                     }
                     
                     if (detectedRole == UserRole.PRESIDENT_CLUB || detectedRole == UserRole.REFERENT_TECH) {
@@ -775,15 +867,64 @@ class CoachViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun chargerOuRecupererSlotsPourHub(categorie: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val userId = SupabaseManager.auth.currentUserOrNull()?.id ?: return@launch
+                
+                // On cherche la convocation pour cette catégorie
+                val response = SupabaseManager.db.from("cde_convocation")
+                    .select {
+                        filter {
+                            eq("coach_id", userId)
+                            eq("categorie", categorie)
+                            or {
+                                eq("statut", "BROUILLON")
+                                eq("statut", "READY")
+                                eq("statut", "ENVOYE")
+                            }
+                        }
+                    }
+                
+                val body = response.data
+                val json = kotlinx.serialization.json.Json { ignoreUnknownKeys = true }
+                val convocations = json.decodeFromString<List<kotlinx.serialization.json.JsonObject>>(body)
+                
+                if (convocations.isNotEmpty()) {
+                    // Trier pour prendre la plus récente ou la plus avancée en statut
+                    val bestConv = convocations.sortedByDescending { 
+                        when(it["statut"]?.toString()?.replace("\"","")) {
+                            "ENVOYE" -> 3
+                            "READY" -> 2
+                            else -> 1
+                        }
+                    }.first()
+                    
+                    val convId = bestConv["id"]?.toString()?.replace("\"","")?.toLongOrNull()
+                    if (convId != null) {
+                        val quota = if (categorie.contains("M13")) 8 else if (categorie.contains("M12")) 6 else 14
+                        Log.d("HUB", "Chargement slots Hub pour $categorie (ConvID: $convId, Quota: $quota)")
+                        chargerSlots(convId, quota, categorie)
+                    }
+                } else {
+                    Log.d("HUB", "Aucune convocation trouvée pour Hub $categorie")
+                }
+            } catch (e: Exception) {
+                Log.e("HUB", "Erreur chargerOuRecupererSlotsPourHub $categorie", e)
+            }
+        }
+    }
+
     init {
         SupabaseManager.auth.sessionStatus.onEach { status ->
-            isLoggedIn = status is io.github.jan.supabase.gotrue.SessionStatus.Authenticated
+            isLoggedIn = status is io.github.jan.supabase.auth.status.SessionStatus.Authenticated
             if (isLoggedIn) {
                 fetchLockerRoomPosts()
                 fetchUserRole()
                 chargerTousLesCycles()
                 chargerCalendrierPrevisionnel()
                 chargerVivier()
+                refreshLabo()
             }
         }.launchIn(viewModelScope)
     }
@@ -842,8 +983,15 @@ class CoachViewModel(application: Application) : AndroidViewModel(application) {
 
     fun updateResults(type: AssessmentType, newResults: Map<String, Double>, coachNote: String? = null) {
         if (type == AssessmentType.FLASH) flashResults = newResults else globalResults = newResults
-        persistenceManager.saveResults(newResults, coachNote)
+        
+        // Link to active session if any
+        val linkedSessionId = if (type == AssessmentType.FLASH) selectedSessionIdForBuilder else null
+        
+        persistenceManager.saveResults(newResults, coachNote, linkedSessionId)
         history = persistenceManager.loadHistory()
+        
+        // Clear active session after linking
+        if (type == AssessmentType.FLASH) selectedSessionIdForBuilder = null
     }
 
     var seasonConfig by mutableStateOf(persistenceManager.loadSeasonConfig())
@@ -860,10 +1008,12 @@ class CoachViewModel(application: Application) : AndroidViewModel(application) {
         chargerCalendrierPrevisionnel()
     }
 
-    fun chargerCalendrierPrevisionnel() {
+    fun chargerCalendrierPrevisionnel(teamsOverride: List<Team>? = null) {
         viewModelScope.launch(Dispatchers.IO) {
             val nouveauxEvenements = mutableListOf<CompetitionEvent>()
-            seasonConfig.teams.forEach { team ->
+            val targetTeams = teamsOverride ?: seasonConfig.teams
+            
+            targetTeams.forEach { team ->
                 val categorie = CalendrierParser.normaliserCategorie(team.name)
                 val events = CalendrierParser.chargerEvenements(
                     context = getApplication(),
@@ -988,4 +1138,51 @@ class CoachViewModel(application: Application) : AndroidViewModel(application) {
     fun clearSelectedResource() { selectedResource = null }
     fun clearSelectedTool() { selectedTool = null }
     fun clearAuthError() { authError = null }
+
+    // --- LABO ---
+    fun refreshLabo() {
+        viewModelScope.launch {
+            isLaboLoading = true
+            laboError = null
+            try {
+                val resources = laboRepository.fetchResources()
+                laboResources = resources.ifEmpty { laboCorpus } // Fallback to static if empty
+            } catch (e: Exception) {
+                Log.e("LABO_VM", "Erreur refreshLabo", e)
+                laboError = "Erreur de chargement du Labo"
+                laboResources = laboCorpus
+            } finally {
+                isLaboLoading = false
+            }
+        }
+    }
+
+    fun proposeSituation(
+        title: String,
+        description: String,
+        focalPoints: List<FocalPoint>,
+        category: LaboCategory,
+        onSuccess: () -> Unit,
+        onError: (String) -> Unit
+    ) {
+        viewModelScope.launch {
+            val profile = seasonConfig.coachProfile
+            val resource = LaboResource(
+                title = title,
+                description = description,
+                authorNickname = if (profile.firstName.isNotEmpty()) "${profile.firstName} ${profile.lastName.take(1)}." else "Coach Anonyme",
+                category = category,
+                focalPoints = focalPoints,
+                versionsCount = 1
+            )
+            
+            val result = laboRepository.proposeResource(resource)
+            if (result.isSuccess) {
+                refreshLabo()
+                onSuccess()
+            } else {
+                onError("Échec de la proposition : ${result.exceptionOrNull()?.message}")
+            }
+        }
+    }
 }

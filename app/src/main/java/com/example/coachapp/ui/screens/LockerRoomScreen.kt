@@ -1,8 +1,9 @@
 package com.example.coachapp.ui.screens
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -20,6 +21,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -40,14 +42,59 @@ fun LockerRoomScreen(
     var showCreatePost by remember { mutableStateOf(false) }
     var selectedPostForThread by remember { mutableStateOf<AnonymousPost?>(null) }
 
+    @OptIn(ExperimentalLayoutApi::class)
+    @Composable
+    fun CategoryFilters() {
+        FlowRow(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            FilterChip(
+                selected = selectedCategory == null,
+                onClick = { selectedCategory = null },
+                label = { Text("Tous") },
+                leadingIcon = { Icon(Icons.Default.Apps, null, modifier = Modifier.size(16.dp)) },
+                colors = FilterChipDefaults.filterChipColors(
+                    selectedContainerColor = Color(0xFF00B4D8),
+                    selectedLabelColor = Color.White,
+                    selectedLeadingIconColor = Color.White,
+                    labelColor = Color.White.copy(alpha = 0.6f),
+                    iconColor = Color.White.copy(alpha = 0.4f)
+                )
+            )
+            PostCategory.entries.forEach { cat ->
+                FilterChip(
+                    selected = selectedCategory == cat,
+                    onClick = { selectedCategory = cat },
+                    label = { Text(cat.label) },
+                    leadingIcon = { 
+                        Icon(getCategoryIcon(cat), null, modifier = Modifier.size(16.dp)) 
+                    },
+                    colors = FilterChipDefaults.filterChipColors(
+                        selectedContainerColor = Color(0xFF00B4D8),
+                        selectedLabelColor = Color.White,
+                        selectedLeadingIconColor = Color.White,
+                        labelColor = Color.White.copy(alpha = 0.6f),
+                        iconColor = Color.White.copy(alpha = 0.4f)
+                    )
+                )
+            }
+        }
+    }
+
     Scaffold(
         modifier = modifier.fillMaxSize(),
+        containerColor = Color.Transparent, // Let parent handle background
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
         floatingActionButton = {
             if (selectedPostForThread == null) {
                 FloatingActionButton(
                     onClick = { showCreatePost = true },
-                    containerColor = MaterialTheme.colorScheme.primary,
-                    contentColor = Color.White
+                    containerColor = Color(0xFF00B4D8),
+                    contentColor = Color.White,
+                    shape = RoundedCornerShape(20.dp),
+                    elevation = FloatingActionButtonDefaults.elevation(8.dp)
                 ) {
                     Icon(Icons.Default.AddComment, contentDescription = "Poster")
                 }
@@ -66,48 +113,59 @@ fun LockerRoomScreen(
                 modifier = Modifier.padding(innerPadding)
             )
         } else {
-            Column(modifier = Modifier.padding(innerPadding).padding(16.dp)) {
-                Text("Vestiaire Anonyme", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Black)
-                Text("Section anonymisée : doutes, conseils et réussites.", style = MaterialTheme.typography.bodyMedium, color = Color.Gray)
+            Column(
+                modifier = Modifier
+                    .padding(innerPadding)
+                    .padding(start = 16.dp, end = 16.dp, top = 0.dp, bottom = 8.dp)
+                    .fillMaxSize()
+            ) {
+                // Header (Fixed)
+                Text(
+                    "Vestiaire Anonyme", 
+                    style = MaterialTheme.typography.headlineMedium, 
+                    fontWeight = FontWeight.Black,
+                    color = Color.White
+                )
+                Text(
+                    "Doutes, conseils et réussites partagés.", 
+                    style = MaterialTheme.typography.bodyMedium, 
+                    color = Color.White.copy(alpha = 0.6f)
+                )
                 
                 Spacer(Modifier.height(16.dp))
 
-                // --- CATEGORY FILTERS ---
-                Row(
-                    modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), 
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                // --- CATEGORY FILTERS SECTION (1/3 of available space) ---
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth()
+                        .verticalScroll(rememberScrollState())
                 ) {
-                    FilterChip(
-                        selected = selectedCategory == null,
-                        onClick = { selectedCategory = null },
-                        label = { Text("Tous") }
-                    )
-                    PostCategory.entries.forEach { cat ->
-                        FilterChip(
-                            selected = selectedCategory == cat,
-                            onClick = { selectedCategory = cat },
-                            label = { Text("${cat.icon} ${cat.label}") }
-                        )
-                    }
+                    CategoryFilters()
                 }
 
                 Spacer(Modifier.height(16.dp))
 
-                // --- FEED ---
+                // --- FEED SECTION (2/3 of available space) ---
                 val filteredPosts = remember(selectedCategory, posts) {
                     if (selectedCategory == null) posts else posts.filter { it.category == selectedCategory }
                 }
 
-                LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    items(filteredPosts, key = { it.id }) { post ->
-                        PostCard(
-                            post = post, 
-                            userRole = userRole,
-                            onClick = { selectedPostForThread = post },
-                            onDelete = { onDeletePost(post.id) }
-                        )
+                Box(modifier = Modifier.weight(2.0f)) {
+                    LazyColumn(
+                        modifier = Modifier.fillMaxSize(),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        items(filteredPosts, key = { it.id }) { post ->
+                            PostCard(
+                                post = post, 
+                                userRole = userRole,
+                                onClick = { selectedPostForThread = post },
+                                onDelete = { onDeletePost(post.id) }
+                            )
+                        }
+                        item { Spacer(modifier = Modifier.height(80.dp)) }
                     }
-                    item { Spacer(modifier = Modifier.height(80.dp)) }
                 }
             }
         }
@@ -137,36 +195,41 @@ fun PostCard(
 
     Card(
         modifier = Modifier.fillMaxWidth().clickable { onClick() },
-        shape = RoundedCornerShape(16.dp),
+        shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(
-            containerColor = if (isSOS) Color(0xFFFFF1F0) else if (isExpert) Color(0xFFE3F2FD) else MaterialTheme.colorScheme.surface
+            containerColor = if (isSOS) Color.Red.copy(alpha = 0.15f) 
+                            else if (isExpert) Color(0xFF00B4D8).copy(alpha = 0.15f) 
+                            else Color.White.copy(alpha = 0.06f)
         ),
-        border = if (isSOS) androidx.compose.foundation.BorderStroke(2.dp, Color.Red) 
-                 else if (isExpert) androidx.compose.foundation.BorderStroke(2.dp, MaterialTheme.colorScheme.primary) 
-                 else null,
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+        border = BorderStroke(
+            0.5.dp, 
+            if (isSOS) Color.Red.copy(alpha = 0.4f) 
+            else if (isExpert) Color(0xFF00B4D8).copy(alpha = 0.4f) 
+            else Color.White.copy(alpha = 0.15f)
+        )
     ) {
-        Column(modifier = Modifier.padding(16.dp)) {
+        Column(modifier = Modifier.padding(20.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 // Persona Avatar
                 Surface(
-                    modifier = Modifier.size(32.dp),
+                    modifier = Modifier.size(36.dp),
                     shape = CircleShape,
-                    color = if (isExpert) MaterialTheme.colorScheme.primary else Color.Gray.copy(alpha = 0.2f)
+                    color = if (isExpert) Color(0xFF00B4D8) else Color.White.copy(alpha = 0.1f),
+                    border = BorderStroke(1.dp, if (isExpert) Color.White.copy(alpha = 0.4f) else Color.White.copy(alpha = 0.1f))
                 ) {
                     Box(contentAlignment = Alignment.Center) {
                         Icon(
                             imageVector = if (isExpert) Icons.Default.Verified else Icons.Default.Person,
                             contentDescription = null,
-                            tint = if (isExpert) Color.White else Color.Gray,
-                            modifier = Modifier.size(18.dp)
+                            tint = if (isExpert) Color.White else Color.White.copy(alpha = 0.4f),
+                            modifier = Modifier.size(20.dp)
                         )
                     }
                 }
                 Spacer(Modifier.width(12.dp))
                 Column {
                     val expertLabel = when (post.authorRole) {
-                        "megadmin" -> "Expert Comité CD26-07 (Megadmin)"
+                        "megadmin" -> "Expert Comité CD26-07"
                         "admin" -> "Modérateur Espace Coachs"
                         else -> "Expert Certifié"
                     }
@@ -174,69 +237,97 @@ fun PostCard(
                     Text(
                         text = if (isExpert) expertLabel else post.persona ?: "Anonyme",
                         style = MaterialTheme.typography.labelMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = if (isExpert) MaterialTheme.colorScheme.primary else Color.Unspecified
+                        fontWeight = FontWeight.Black,
+                        color = if (isExpert) Color(0xFF00B4D8) else Color.White
                     )
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
-                            text = SimpleDateFormat("HH:mm - dd MMM", Locale.FRENCH).format(Date(post.timestamp)),
+                            text = SimpleDateFormat("HH:mm · dd MMM", Locale.FRENCH).format(Date(post.timestamp)),
                             style = MaterialTheme.typography.labelSmall,
-                            color = Color.Gray
+                            color = Color.White.copy(alpha = 0.4f)
                         )
                         if (post.isAnonymizedByIA) {
                             Spacer(Modifier.width(8.dp))
-                            Icon(Icons.Default.AutoAwesome, null, modifier = Modifier.size(10.dp), tint = MaterialTheme.colorScheme.secondary)
-                            Text("Anonymisé par IA", style = MaterialTheme.typography.labelSmall, fontSize = 8.sp, color = MaterialTheme.colorScheme.secondary)
+                            Icon(Icons.Default.AutoAwesome, null, modifier = Modifier.size(12.dp), tint = Color(0xFF00B4D8).copy(alpha = 0.6f))
+                            Text("Sécurisé IA", style = MaterialTheme.typography.labelSmall, fontSize = 8.sp, color = Color(0xFF00B4D8).copy(alpha = 0.6f))
                         }
                     }
                 }
                 Spacer(Modifier.weight(1f))
                 
                 if (userRole == UserRole.ADMIN || userRole == UserRole.MEGADMIN) {
-                    IconButton(onClick = onDelete, modifier = Modifier.size(24.dp)) {
-                        Icon(Icons.Default.Delete, null, tint = Color.Red.copy(alpha = 0.5f), modifier = Modifier.size(16.dp))
+                    IconButton(onClick = onDelete, modifier = Modifier.size(28.dp)) {
+                        Icon(Icons.Default.Delete, null, tint = Color.Red.copy(alpha = 0.4f), modifier = Modifier.size(18.dp))
                     }
-                    Spacer(Modifier.width(8.dp))
+                    Spacer(Modifier.width(4.dp))
                 }
 
                 Surface(
-                    color = Color.Gray.copy(alpha = 0.1f),
-                    shape = RoundedCornerShape(4.dp)
+                    color = if (isSOS) Color.Red.copy(alpha = 0.2f) else Color.White.copy(alpha = 0.1f),
+                    shape = RoundedCornerShape(6.dp),
+                    border = BorderStroke(0.5.dp, if (isSOS) Color.Red.copy(alpha = 0.4f) else Color.White.copy(alpha = 0.1f))
                 ) {
                     Text(
-                        text = post.category.label,
-                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                        text = post.category.label.uppercase(),
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
                         style = MaterialTheme.typography.labelSmall,
-                        fontSize = 9.sp
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = if (isSOS) Color.Red else Color.White.copy(alpha = 0.7f)
                     )
                 }
             }
 
-            Spacer(Modifier.height(12.dp))
-            Text(post.title ?: "Sujet", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Black)
-            Spacer(Modifier.height(4.dp))
-            Text(post.content ?: "", style = MaterialTheme.typography.bodyMedium)
-
             Spacer(Modifier.height(16.dp))
+            Text(
+                post.title ?: "Sujet", 
+                style = MaterialTheme.typography.titleLarge, 
+                fontWeight = FontWeight.Black,
+                color = Color.White
+            )
+            Spacer(Modifier.height(6.dp))
+            Text(
+                post.content ?: "", 
+                style = MaterialTheme.typography.bodyMedium,
+                color = Color.White.copy(alpha = 0.8f),
+                lineHeight = 20.sp
+            )
+
+            Spacer(Modifier.height(20.dp))
 
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Row(
-                    modifier = Modifier
-                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.1f), CircleShape)
-                        .padding(horizontal = 12.dp, vertical = 6.dp),
-                    verticalAlignment = Alignment.CenterVertically
+                Surface(
+                    modifier = Modifier.clickable { /* Logic support */ },
+                    color = Color(0xFF00B4D8).copy(alpha = 0.1f),
+                    shape = CircleShape,
+                    border = BorderStroke(0.5.dp, Color(0xFF00B4D8).copy(alpha = 0.3f))
                 ) {
-                    Icon(Icons.Default.ThumbUp, null, modifier = Modifier.size(14.dp), tint = MaterialTheme.colorScheme.primary)
-                    Spacer(Modifier.width(6.dp))
-                    Text("Je partage ce doute (${post.supportCount})", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                    Row(
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(Icons.Default.ThumbUp, null, modifier = Modifier.size(14.dp), tint = Color(0xFF00B4D8))
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            "Je partage ce doute (${post.supportCount})", 
+                            fontSize = 11.sp, 
+                            fontWeight = FontWeight.ExtraBold, 
+                            color = Color(0xFF00B4D8)
+                        )
+                    }
                 }
                 
                 Spacer(Modifier.weight(1f))
                 
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.AutoMirrored.Filled.Comment, null, modifier = Modifier.size(16.dp), tint = Color.Gray)
-                    Spacer(Modifier.width(4.dp))
-                    Text("${post.comments.size} réponses", fontSize = 11.sp, color = Color.Gray)
+                    Icon(Icons.AutoMirrored.Filled.Comment, null, modifier = Modifier.size(18.dp), tint = Color.White.copy(alpha = 0.3f))
+                    Spacer(Modifier.width(6.dp))
+                    Text(
+                        "${post.comments.size} réponses", 
+                        fontSize = 12.sp, 
+                        color = Color.White.copy(alpha = 0.4f),
+                        fontWeight = FontWeight.Bold
+                    )
                 }
             }
         }
@@ -254,22 +345,39 @@ fun ThreadView(
     var newCommentText by remember { mutableStateOf("") }
 
     Column(modifier = modifier.fillMaxSize().padding(16.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, null) }
-            Text("Discussion", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            IconButton(onClick = onBack) { 
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, null, tint = Color.White) 
+            }
+            Text("Discussion", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Black, color = Color.White)
         }
         
         LazyColumn(modifier = Modifier.weight(1f)) {
             item {
                 PostCard(post, onClick = {}) // Current post as header
-                Spacer(Modifier.height(24.dp))
-                Text("RÉPONSES", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, color = Color.Gray)
-                Spacer(Modifier.height(12.dp))
+                Spacer(Modifier.height(32.dp))
+                Text(
+                    "RÉPONSES", 
+                    style = MaterialTheme.typography.labelLarge, 
+                    fontWeight = FontWeight.Black, 
+                    color = Color.White.copy(alpha = 0.5f),
+                    letterSpacing = 1.sp
+                )
+                Spacer(Modifier.height(16.dp))
             }
 
             if (post.comments.isEmpty()) {
                 item {
-                    Text("Aucun conseil pour le moment. Soyez le premier à aider ce coach !", style = MaterialTheme.typography.bodySmall, color = Color.Gray, modifier = Modifier.padding(16.dp))
+                    Text(
+                        "Aucun conseil pour le moment. Soyez le premier à aider ce coach !", 
+                        style = MaterialTheme.typography.bodySmall, 
+                        color = Color.White.copy(alpha = 0.4f), 
+                        modifier = Modifier.padding(32.dp),
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                    )
                 }
             } else {
                 items(post.comments, key = { it.timestamp }) { comment ->
@@ -279,29 +387,48 @@ fun ThreadView(
         }
 
         // --- ADD COMMENT AREA ---
-        Row(
+        Surface(
             modifier = Modifier.fillMaxWidth().padding(top = 16.dp),
-            verticalAlignment = Alignment.CenterVertically
+            color = Color.White.copy(alpha = 0.05f),
+            shape = RoundedCornerShape(32.dp),
+            border = BorderStroke(0.5.dp, Color.White.copy(alpha = 0.1f))
         ) {
-            OutlinedTextField(
-                value = newCommentText,
-                onValueChange = { newCommentText = it },
-                placeholder = { Text("Votre conseil anonyme...", fontSize = 14.sp) },
-                modifier = Modifier.weight(1f),
-                shape = RoundedCornerShape(24.dp),
-                maxLines = 3
-            )
-            Spacer(Modifier.width(8.dp))
-            IconButton(
-                onClick = {
-                    val newComment = AnonymousComment(persona = persona, content = newCommentText)
-                    onAddComment(post.copy(comments = post.comments + newComment))
-                    newCommentText = ""
-                },
-                enabled = newCommentText.isNotBlank(),
-                colors = IconButtonDefaults.iconButtonColors(containerColor = MaterialTheme.colorScheme.primary, contentColor = Color.White)
+            Row(
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Icon(Icons.AutoMirrored.Filled.Send, null)
+                TextField(
+                    value = newCommentText,
+                    onValueChange = { newCommentText = it },
+                    placeholder = { Text("Votre conseil anonyme...", fontSize = 14.sp, color = Color.White.copy(alpha = 0.3f)) },
+                    modifier = Modifier.weight(1f),
+                    colors = TextFieldDefaults.colors(
+                        focusedContainerColor = Color.Transparent,
+                        unfocusedContainerColor = Color.Transparent,
+                        disabledContainerColor = Color.Transparent,
+                        focusedIndicatorColor = Color.Transparent,
+                        unfocusedIndicatorColor = Color.Transparent,
+                        focusedTextColor = Color.White,
+                        unfocusedTextColor = Color.White
+                    ),
+                    maxLines = 3
+                )
+                Spacer(Modifier.width(8.dp))
+                IconButton(
+                    onClick = {
+                        val newComment = AnonymousComment(persona = persona, content = newCommentText)
+                        onAddComment(post.copy(comments = post.comments + newComment))
+                        newCommentText = ""
+                    },
+                    enabled = newCommentText.isNotBlank(),
+                    colors = IconButtonDefaults.iconButtonColors(
+                        containerColor = Color(0xFF00B4D8), 
+                        contentColor = Color.White,
+                        disabledContainerColor = Color.White.copy(alpha = 0.1f)
+                    )
+                ) {
+                    Icon(Icons.AutoMirrored.Filled.Send, null)
+                }
             }
         }
     }
@@ -313,11 +440,12 @@ fun CommentCard(comment: AnonymousComment) {
     var userVote by remember { mutableIntStateOf(0) } // 1 for up, -1 for down
 
     Card(
-        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-        shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+        modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.04f)),
+        border = BorderStroke(0.5.dp, Color.White.copy(alpha = 0.1f))
     ) {
-        Row(modifier = Modifier.padding(12.dp)) {
+        Row(modifier = Modifier.padding(16.dp)) {
             // Vote side bar
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 IconButton(
@@ -325,43 +453,44 @@ fun CommentCard(comment: AnonymousComment) {
                         if (userVote == 1) { score -= 1; userVote = 0 }
                         else { score += if (userVote == -1) 2 else 1; userVote = 1 }
                     },
-                    modifier = Modifier.size(24.dp)
+                    modifier = Modifier.size(28.dp)
                 ) {
-                    Icon(Icons.Default.ArrowUpward, null, tint = if (userVote == 1) MaterialTheme.colorScheme.primary else Color.Gray)
+                    Icon(Icons.Default.ArrowUpward, null, tint = if (userVote == 1) Color(0xFF00B4D8) else Color.White.copy(alpha = 0.3f))
                 }
-                Text("${score}", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                Text("${score}", fontWeight = FontWeight.Black, fontSize = 13.sp, color = Color.White)
                 IconButton(
                     onClick = { 
                         if (userVote == -1) { score += 1; userVote = 0 }
                         else { score -= if (userVote == 1) 2 else 1; userVote = -1 }
                     },
-                    modifier = Modifier.size(24.dp)
+                    modifier = Modifier.size(28.dp)
                 ) {
-                    Icon(Icons.Default.ArrowDownward, null, tint = if (userVote == -1) Color.Red else Color.Gray)
+                    Icon(Icons.Default.ArrowDownward, null, tint = if (userVote == -1) Color.Red else Color.White.copy(alpha = 0.3f))
                 }
             }
             
-            Spacer(Modifier.width(12.dp))
+            Spacer(Modifier.width(16.dp))
             
             Column(modifier = Modifier.weight(1f)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(comment.persona, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelMedium)
+                    Text(comment.persona, fontWeight = FontWeight.Black, style = MaterialTheme.typography.labelLarge, color = Color.White)
                     Spacer(Modifier.width(8.dp))
                     Text(
                         SimpleDateFormat("HH:mm", Locale.FRENCH).format(Date(comment.timestamp)),
                         style = MaterialTheme.typography.labelSmall,
-                        color = Color.Gray
+                        color = Color.White.copy(alpha = 0.4f)
                     )
                 }
-                Text(comment.content, style = MaterialTheme.typography.bodyMedium)
+                Spacer(Modifier.height(4.dp))
+                Text(comment.content, style = MaterialTheme.typography.bodyMedium, color = Color.White.copy(alpha = 0.8f))
                 
                 // Moderation placeholder
                 TextButton(
                     onClick = { /* Report */ },
                     contentPadding = PaddingValues(0.dp),
-                    modifier = Modifier.height(24.dp)
+                    modifier = Modifier.height(32.dp).padding(top = 4.dp)
                 ) {
-                    Text("Signaler", color = Color.Red.copy(alpha = 0.6f), fontSize = 10.sp)
+                    Text("Signaler", color = Color.Red.copy(alpha = 0.5f), fontSize = 10.sp, fontWeight = FontWeight.Bold)
                 }
             }
         }
@@ -435,49 +564,84 @@ fun CreatePostDialog(
     } else {
         AlertDialog(
             onDismissRequest = onDismiss,
-            title = { Text("Nouveau sujet anonyme") },
+            containerColor = Color(0xFF002147).copy(alpha = 0.98f),
+            modifier = Modifier.padding(16.dp).fillMaxWidth(),
+            title = { 
+                Text(
+                    "NOUVEAU SUJET ANONYME", 
+                    fontWeight = FontWeight.Black, 
+                    color = Color.White,
+                    fontSize = 18.sp,
+                    letterSpacing = 1.sp
+                ) 
+            },
             text = {
                 Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
                     
                     // --- SELECTEUR DE POSTURE (ADMIN ONLY) ---
                     if (userRole == UserRole.ADMIN || userRole == UserRole.MEGADMIN) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
-                            verticalAlignment = Alignment.CenterVertically
+                        Surface(
+                            color = Color.White.copy(alpha = 0.05f),
+                            shape = RoundedCornerShape(12.dp),
+                            border = BorderStroke(0.5.dp, Color.White.copy(alpha = 0.1f)),
+                            modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp)
                         ) {
-                            Text("Mode Officiel", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
-                            Spacer(Modifier.weight(1f))
-                            Switch(checked = isOfficial, onCheckedChange = { isOfficial = it })
+                            Row(
+                                modifier = Modifier.padding(12.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text("Mode Officiel", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold, color = Color.White)
+                                    Text("Publier en tant qu'Expert", style = MaterialTheme.typography.labelSmall, color = Color.White.copy(alpha = 0.5f))
+                                }
+                                Switch(
+                                    checked = isOfficial, 
+                                    onCheckedChange = { isOfficial = it },
+                                    colors = SwitchDefaults.colors(checkedThumbColor = Color(0xFF00B4D8))
+                                )
+                            }
                         }
                     }
 
                     // --- IDENTITY SELECTION ---
                     if (isOfficial) {
-                        Surface(color = MaterialTheme.colorScheme.primaryContainer, shape = RoundedCornerShape(8.dp), modifier = Modifier.fillMaxWidth()) {
-                            Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                                Icon(Icons.Default.Verified, null, tint = MaterialTheme.colorScheme.primary)
-                                Spacer(Modifier.width(8.dp))
-                                Text("Vous postez en tant qu'Expert", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                        Surface(
+                            color = Color(0xFF00B4D8).copy(alpha = 0.15f), 
+                            shape = RoundedCornerShape(12.dp), 
+                            modifier = Modifier.fillMaxWidth(),
+                            border = BorderStroke(1.dp, Color(0xFF00B4D8).copy(alpha = 0.4f))
+                        ) {
+                            Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Default.Verified, null, tint = Color(0xFF00B4D8), modifier = Modifier.size(20.dp))
+                                Spacer(Modifier.width(12.dp))
+                                Text("Vous postez en tant qu'Expert", fontWeight = FontWeight.Black, color = Color(0xFF00B4D8), fontSize = 13.sp)
                             }
                         }
                     } else {
-                        Text("Votre alias pour ce post :", style = MaterialTheme.typography.labelSmall)
+                        Text("VOTRE ALIAS POUR CE POST", style = MaterialTheme.typography.labelSmall, color = Color.White.copy(alpha = 0.5f), fontWeight = FontWeight.Bold)
                         var expanded by remember { mutableStateOf(false) }
                         
                         Box(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
-                            OutlinedCard(
+                            Surface(
                                 onClick = { expanded = true },
-                                modifier = Modifier.fillMaxWidth()
+                                modifier = Modifier.fillMaxWidth(),
+                                color = Color.White.copy(alpha = 0.05f),
+                                shape = RoundedCornerShape(12.dp),
+                                border = BorderStroke(1.dp, Color.White.copy(alpha = 0.1f))
                             ) {
-                                Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                                    Text(selectedAlias, modifier = Modifier.weight(1f))
-                                    Icon(Icons.Default.ArrowDropDown, null)
+                                Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                                    Text(selectedAlias, modifier = Modifier.weight(1f), color = Color.White, fontWeight = FontWeight.Bold)
+                                    Icon(Icons.Default.ArrowDropDown, null, tint = Color.White.copy(alpha = 0.5f))
                                 }
                             }
-                            DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+                            DropdownMenu(
+                                expanded = expanded, 
+                                onDismissRequest = { expanded = false },
+                                modifier = Modifier.background(Color(0xFF001529)).border(0.5.dp, Color.White.copy(alpha = 0.1f))
+                            ) {
                                 COACH_ALIASES.forEach { alias ->
                                     DropdownMenuItem(
-                                        text = { Text(alias) },
+                                        text = { Text(alias, color = Color.White) },
                                         onClick = { selectedAlias = alias; expanded = false }
                                     )
                                 }
@@ -485,45 +649,99 @@ fun CreatePostDialog(
                         }
                     }
 
-                    Spacer(Modifier.height(16.dp))
-                    Text("Thématique :", style = MaterialTheme.typography.labelSmall)
-                    Row(
-                        modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), 
-                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    Spacer(Modifier.height(20.dp))
+                    Text("THÉMATIQUE", style = MaterialTheme.typography.labelSmall, color = Color.White.copy(alpha = 0.5f), fontWeight = FontWeight.Bold)
+                    Spacer(Modifier.height(12.dp))
+                    
+                    @OptIn(ExperimentalLayoutApi::class)
+                    FlowRow(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         PostCategory.entries.forEach { cat ->
                             FilterChip(
                                 selected = category == cat,
                                 onClick = { category = cat },
-                                label = { Text(cat.label, fontSize = 10.sp) }
+                                label = { Text(cat.label, fontSize = 11.sp) },
+                                leadingIcon = { 
+                                    Icon(getCategoryIcon(cat), null, modifier = Modifier.size(16.dp)) 
+                                },
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = Color(0xFF00B4D8),
+                                    selectedLabelColor = Color.White,
+                                    selectedLeadingIconColor = Color.White,
+                                    labelColor = Color.White.copy(alpha = 0.6f),
+                                    iconColor = Color.White.copy(alpha = 0.4f)
+                                )
                             )
                         }
                     }
 
+                    Spacer(Modifier.height(24.dp))
+                    OutlinedTextField(
+                        value = title, 
+                        onValueChange = { title = it }, 
+                        label = { Text("SUJET / TITRE", fontSize = 11.sp, fontWeight = FontWeight.Bold) }, 
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = Color(0xFF00B4D8),
+                            unfocusedBorderColor = Color.White.copy(alpha = 0.1f),
+                            focusedTextColor = Color.White,
+                            unfocusedTextColor = Color.White,
+                            focusedLabelColor = Color(0xFF00B4D8),
+                            unfocusedLabelColor = Color.White.copy(alpha = 0.4f)
+                        )
+                    )
                     Spacer(Modifier.height(12.dp))
-                    OutlinedTextField(value = title, onValueChange = { title = it }, label = { Text("Sujet / Titre") }, modifier = Modifier.fillMaxWidth())
-                    Spacer(Modifier.height(8.dp))
                     OutlinedTextField(
                         value = content, 
                         onValueChange = { content = it }, 
-                        label = { Text(if (isOfficial) "Message Officiel" else "Votre message (style libre)") }, 
-                        modifier = Modifier.fillMaxWidth().height(120.dp),
-                        placeholder = { Text(if (isOfficial) "Soyez clair et professionnel." else "L'IA réécrira ce message pour vous anonymiser.") }
+                        label = { Text(if (isOfficial) "MESSAGE OFFICIEL" else "VOTRE MESSAGE (STYLE LIBRE)", fontSize = 11.sp, fontWeight = FontWeight.Bold) }, 
+                        modifier = Modifier.fillMaxWidth().height(150.dp),
+                        shape = RoundedCornerShape(12.dp),
+                        placeholder = { Text(if (isOfficial) "Soyez clair et professionnel." else "L'IA réécrira ce message pour vous anonymiser.", color = Color.White.copy(alpha = 0.2f), fontSize = 13.sp) },
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = Color(0xFF00B4D8),
+                            unfocusedBorderColor = Color.White.copy(alpha = 0.1f),
+                            focusedTextColor = Color.White,
+                            unfocusedTextColor = Color.White,
+                            focusedLabelColor = Color(0xFF00B4D8),
+                            unfocusedLabelColor = Color.White.copy(alpha = 0.4f)
+                        )
                     )
                 }
             },
             confirmButton = {
                 Button(
                     onClick = { isAnonymizing = true },
-                    enabled = title.isNotBlank() && content.isNotBlank()
+                    enabled = title.isNotBlank() && content.isNotBlank(),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color.White, contentColor = Color.Black),
+                    shape = RoundedCornerShape(10.dp)
                 ) {
                     Icon(if (isOfficial) Icons.AutoMirrored.Filled.Send else Icons.Default.AutoAwesome, null, modifier = Modifier.size(16.dp))
                     Spacer(Modifier.width(8.dp))
-                    Text(if (isOfficial) "Publier" else "Sécuriser & Poster")
+                    Text(if (isOfficial) "PUBLIER" else "SÉCURISER & POSTER", fontWeight = FontWeight.Black)
                 }
             },
-            dismissButton = { TextButton(onClick = onDismiss) { Text("Annuler") } }
+            dismissButton = { 
+                TextButton(onClick = onDismiss) { 
+                    Text("ANNULER", color = Color.White.copy(alpha = 0.5f), fontWeight = FontWeight.Bold) 
+                } 
+            }
         )
+    }
+}
+
+fun getCategoryIcon(category: PostCategory): ImageVector {
+    return when (category) {
+        PostCategory.TACTIC -> Icons.Default.GridView
+        PostCategory.MENTAL -> Icons.Default.Psychology
+        PostCategory.MANAGEMENT -> Icons.Default.Groups
+        PostCategory.EQUIPMENT -> Icons.Default.SportsVolleyball
+        PostCategory.SUCCESS -> Icons.Default.Celebration
+        PostCategory.SOS -> Icons.Default.Report
     }
 }
 

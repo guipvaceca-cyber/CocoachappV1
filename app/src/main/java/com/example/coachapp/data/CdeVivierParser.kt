@@ -146,7 +146,9 @@ object CdeVivierParser {
 
                 SupabaseManager.db
                     .from("cde_vivier")
-                    .upsert(rows, onConflict = "num_licence,saison")
+                    .upsert(rows) {
+                        onConflict = "num_licence,saison"
+                    }
 
                 compteur += batch.size
             }

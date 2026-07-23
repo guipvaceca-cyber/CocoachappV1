@@ -34,7 +34,7 @@ class TrainingViewModel(
     init {
         com.example.coachapp.data.SupabaseManager.auth.sessionStatus
             .onEach { status ->
-                if (status is io.github.jan.supabase.gotrue.SessionStatus.Authenticated) {
+                if (status is io.github.jan.supabase.auth.status.SessionStatus.Authenticated) {
                     chargerInfosClub()
                 }
             }

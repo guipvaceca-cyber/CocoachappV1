@@ -23,6 +23,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
@@ -70,6 +71,7 @@ fun CoachAppApp(viewModel: CoachViewModel = viewModel()) {
     )
 
     var currentDestination by rememberSaveable { mutableStateOf(AppDestinations.DASHBOARD) }
+    var selectedStageCategories by remember { mutableStateOf<List<String>>(emptyList()) }
 
     if (!viewModel.isLoggedIn) {
         LoginScreen(
@@ -127,10 +129,14 @@ fun CoachAppApp(viewModel: CoachViewModel = viewModel()) {
         
         val allTeams = remember(viewModel.seasonConfig.teams, presidentState) {
             val localTeams = viewModel.seasonConfig.teams
-            val customColors = persistenceManager.loadTeamColors() // Refresh on every state change
-            val clubTeams = if (presidentState is com.example.coachapp.ui.president.PresidentUiState.Success) {
+            val customColors = persistenceManager.loadTeamColors()
+            
+            if (presidentState is com.example.coachapp.ui.president.PresidentUiState.Success) {
+                val successState = presidentState as com.example.coachapp.ui.president.PresidentUiState.Success
                 val userId = com.example.coachapp.data.SupabaseManager.auth.currentUserOrNull()?.id
-                (presidentState as com.example.coachapp.ui.president.PresidentUiState.Success).collectifs
+                
+                // 1. Extraire mes équipes (celles où je suis coach)
+                val myClubTeams = successState.collectifs
                     .filter { detail -> detail.rattachements.any { it.coachId == userId } }
                     .map { detail ->
                         val teamId = detail.collectif.id
@@ -147,11 +153,35 @@ fun CoachAppApp(viewModel: CoachViewModel = viewModel()) {
                             }
                         )
                     }
-            } else emptyList()
-            
-            // Merge: prioritizes club teams if IDs overlap, then adds local ones
-            val merged = (clubTeams + localTeams).distinctBy { it.id }
-            merged
+                
+                // Fusion locale + club pour identifier "mes" équipes prioritaires
+                val myTeamsPriority = (myClubTeams + localTeams).distinctBy { it.id }
+
+                // 2. Extraire les autres équipes du club (collègues)
+                val othersClubTeams = successState.collectifs
+                    .filter { detail -> detail.rattachements.none { it.coachId == userId } }
+                    .map { detail ->
+                        com.example.coachapp.data.Team(
+                            id = detail.collectif.id,
+                            name = detail.collectif.nom,
+                            color = Color(0xFF9E9E9E), // Gris par défaut avant résolution
+                            format = when(detail.collectif.format) {
+                                "2x2" -> com.example.coachapp.data.TeamFormat.TWO_TWO
+                                "3x3" -> com.example.coachapp.data.TeamFormat.THREE_THREE
+                                "4x4" -> com.example.coachapp.data.TeamFormat.FOUR_FOUR
+                                else -> com.example.coachapp.data.TeamFormat.SIX_SIX
+                            }
+                        )
+                    }
+
+                // 3. Résoudre les conflits (mes couleurs gagnent)
+                com.example.coachapp.ui.util.ColorUtils.resolveLocalColorConflicts(
+                    myTeams = myTeamsPriority,
+                    otherClubTeams = othersClubTeams
+                )
+            } else {
+                localTeams
+            }
         }
 
         val allPlayers = remember(viewModel.seasonConfig.players, presidentState) {
@@ -183,6 +213,13 @@ fun CoachAppApp(viewModel: CoachViewModel = viewModel()) {
                 players = allPlayers,
                 clubEvents = clubEventsState
             )
+        }
+
+        // Trigger loading events for ALL club teams (including those not coached by me)
+        LaunchedEffect(allTeams) {
+            if (allTeams.isNotEmpty()) {
+                viewModel.chargerCalendrierPrevisionnel(allTeams)
+            }
         }
 
         NavigationSuiteScaffold(
@@ -423,6 +460,8 @@ fun CoachAppApp(viewModel: CoachViewModel = viewModel()) {
                             userRole = viewModel.userRole,
                             isCoachCde = viewModel.isCoachCde,
                             isStageOpen = viewModel.isStageOpen,                 // ← nouveau
+                            stageOpenStatuses = viewModel.stageOpenStatuses,    // ← nouveau
+                            slotsByCategorie = viewModel.slotsByCategorie,      // ← nouveau
                             cdeAssignments = viewModel.cdeAssignments,
                             vivierPrincipal = viewModel.vivierPrincipal,    // ← ajoute
                             vivierInferieur = viewModel.vivierInferieur,
@@ -433,11 +472,11 @@ fun CoachAppApp(viewModel: CoachViewModel = viewModel()) {
                                 val quota = com.example.coachapp.ui.screens.quotaParCategorie(categorie)
                                 viewModel.creerOuChargerConvocation(categorie, quota)
                             },
-                            onSlotChange = { index, type, joueur ->
-                                viewModel.sauvegarderSlot(index, type, joueur)
+                            onSlotChange = { index, type, joueur, cat ->
+                                viewModel.sauvegarderSlot(index, type, joueur, cat)
                             },
-                            onSauvegarder = { principal, banc ->
-                                viewModel.sauvegarderSelection(principal, banc)
+                            onSauvegarder = { principal, banc, cat ->
+                                viewModel.sauvegarderSelection(principal, banc, cat)
                                 viewModel.finaliserConvocation()
                             },
                             onEnvoyerSelection = { categorie ->                  // ← nouveau
@@ -449,25 +488,39 @@ fun CoachAppApp(viewModel: CoachViewModel = viewModel()) {
                             onNavigateToGlobalAssessment = {
                                 viewModel.currentAssessmentType = com.example.coachapp.data.AssessmentType.GLOBAL
                                 currentDestination = AppDestinations.DIAGNOSTIC
+                            },
+                            onNavigateToStagePlanning = { categories ->
+                                selectedStageCategories = categories
+                                currentDestination = AppDestinations.STAGE_PLANNING
+                            },
+                            onUpdateProfilePicture = { uri ->
+                                val updatedProfile = mergedSeasonConfig.coachProfile.copy(profilePictureUri = uri)
+                                viewModel.updateSeasonConfig(mergedSeasonConfig.copy(coachProfile = updatedProfile))
                             }
                         )
-                        AppDestinations.SESSION_RECAP -> {
-                            if (viewModel.selectedSessionForRecap != null) {
-                                SessionRecapScreen(
-                                    session = viewModel.selectedSessionForRecap!!,
-                                    persistenceManager = persistenceManager,
-                                    onBack = { currentDestination = AppDestinations.SEASON_CALENDAR },
-                                    onRepeat = { 
-                                        viewModel.selectedSessionIdForBuilder = viewModel.selectedSessionForRecap!!.id
-                                        currentDestination = AppDestinations.SESSION_BUILDER 
-                                    },
-                                    onExportToLabo = { currentDestination = AppDestinations.COACH_SPACE },
-                                    onUpdateSession = { viewModel.updateSeasonConfig(mergedSeasonConfig.copy(plannedTrainings = mergedSeasonConfig.plannedTrainings.map { s -> if (s.id == it.id) it else s })) }
-                                )
-                            } else {
-                                currentDestination = AppDestinations.SEASON_CALENDAR
+                        AppDestinations.STAGE_PLANNING -> StagePlanningScreen(
+                            targetCategories = selectedStageCategories,
+                            onBack = { currentDestination = AppDestinations.PROFILE }
+                        )
+                            AppDestinations.SESSION_RECAP -> {
+                                if (viewModel.selectedSessionForRecap != null) {
+                                    SessionRecapScreen(
+                                        session = viewModel.selectedSessionForRecap!!,
+                                        persistenceManager = persistenceManager,
+                                        coachId = com.example.coachapp.data.SupabaseManager.auth.currentUserOrNull()?.id ?: "",
+                                        supabase = com.example.coachapp.data.SupabaseManager.client,
+                                        onBack = { currentDestination = AppDestinations.SEASON_CALENDAR },
+                                        onRepeat = {
+                                            viewModel.selectedSessionIdForBuilder = viewModel.selectedSessionForRecap!!.id
+                                            currentDestination = AppDestinations.SESSION_BUILDER
+                                        },
+                                        onExportToLabo = { currentDestination = AppDestinations.COACH_SPACE },
+                                        onUpdateSession = { viewModel.updateSeasonConfig(mergedSeasonConfig.copy(plannedTrainings = mergedSeasonConfig.plannedTrainings.map { s -> if (s.id == it.id) it else s })) }
+                                    )
+                                } else {
+                                    currentDestination = AppDestinations.SEASON_CALENDAR
+                                }
                             }
-                        }
                         AppDestinations.PRESIDENT_DASHBOARD -> {
                             PresidentDashboardScreen(
                                 viewModel = presidentViewModel,
@@ -505,4 +558,5 @@ enum class AppDestinations(
     SESSION_RECAP("Bilan", R.drawable.ic_home),
     PRESIDENT_DASHBOARD("Gestion Club", R.drawable.ic_home),
     COPLAYER_PLANNING("Mon Planning", R.drawable.ic_home),
+    STAGE_PLANNING("Planning Stage", R.drawable.ic_home),
 }

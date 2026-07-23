@@ -26,29 +26,31 @@ class LocalVoiceManager(private val context: Context) {
     private val _isRecording = MutableStateFlow(false)
     val isRecording = _isRecording.asStateFlow()
 
-    fun startListeningAndRecording() {
+    fun startListeningAndRecording(onlyTranscription: Boolean = false) {
         if (_isRecording.value) return
 
         try {
-            // 1. Préparation de l'enregistrement audio
-            val folder = File(context.filesDir, "voice_notes")
-            if (!folder.exists()) folder.mkdirs()
-            
-            val file = File(folder, "note_${System.currentTimeMillis()}.m4a")
-            audioFile = file
+            if (!onlyTranscription) {
+                // 1. Préparation de l'enregistrement audio
+                val folder = File(context.filesDir, "voice_notes")
+                if (!folder.exists()) folder.mkdirs()
+                
+                val file = File(folder, "note_${System.currentTimeMillis()}.m4a")
+                audioFile = file
 
-            mediaRecorder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                MediaRecorder(context)
-            } else {
-                @Suppress("DEPRECATION")
-                MediaRecorder()
-            }.apply {
-                setAudioSource(MediaRecorder.AudioSource.MIC)
-                setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
-                setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
-                setOutputFile(file.absolutePath)
-                prepare()
-                start()
+                mediaRecorder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                    MediaRecorder(context)
+                } else {
+                    @Suppress("DEPRECATION")
+                    MediaRecorder()
+                }.apply {
+                    setAudioSource(MediaRecorder.AudioSource.MIC)
+                    setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
+                    setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
+                    setOutputFile(file.absolutePath)
+                    prepare()
+                    start()
+                }
             }
 
             // 2. Préparation de la reconnaissance vocale

@@ -113,7 +113,7 @@ fun TeamHubScreen(
                                     Icon(Icons.Default.Groups, null, modifier = Modifier.size(64.dp), tint = Color.White.copy(alpha = 0.2f))
                                     Spacer(Modifier.height(16.dp))
                                     Text("Aucun collectif rattaché.", style = MaterialTheme.typography.titleMedium, color = Color.White)
-                                    Text("Demandez à votre président ou rattachiez-vous depuis le Hub Président.", 
+                                    Text("Demandez à votre président ou rattachez-vous depuis le Hub Président.", 
                                         textAlign = TextAlign.Center, 
                                         color = Color.White.copy(alpha = 0.6f),
                                         modifier = Modifier.padding(horizontal = 32.dp)

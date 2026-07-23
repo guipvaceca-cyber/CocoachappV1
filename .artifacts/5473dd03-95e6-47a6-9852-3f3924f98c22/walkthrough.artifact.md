@@ -1,30 +1,24 @@
-# Refonte de l'App Terrain : Performance & Design
+# Walkthrough - Correction de l'affichage du clavier sur le Terrain
 
-L'écran de terrain a été entièrement repensé pour être instantané et s'aligner sur la nouvelle identité visuelle premium (Glassmorphism & Deep Blue).
+J'ai corrigé le problème où le clavier Android recouvrait la zone de saisie des notes sur l'écran "Terrain" (Session Companion).
 
-## Améliorations de Performance
+## Changements Réalisés
 
-- **Accès Instantané** : Suppression de l'écran de lancement (`TerrainLaunchScreen`) et de ses animations. Cliquer sur "Lancer l'entraînement" ouvre désormais l'outil immédiatement, sans aucune attente.
-- **Suppression du Scanner** : L'animation de scan à l'entrée de la séance a été retirée pour ne pas gêner le coach dans le feu de l'action.
+### 1. Rendre le contenu scrollable
+- J'ai ajouté `Modifier.verticalScroll(rememberScrollState())` à la colonne principale qui contient la carte de la séance et la zone de saisie des notes.
+- **Bénéfice** : Même si le clavier prend beaucoup de place, vous pouvez désormais faire défiler l'écran pour accéder à la zone de saisie.
 
-## Refonte Visuelle (SessionCompanion)
+### 2. Gestion intelligente de l'espace
+- J'ai remplacé le `Spacer(Modifier.weight(1f))` par un `Spacer(Modifier.height(24.dp))`.
+- **Pourquoi ?** : Dans un conteneur scrollable, l'utilisation de `weight` est déconseillée car elle tente d'occuper un espace "infini" ou indéfini. En utilisant un espacement fixe, on assure une transition fluide entre la carte d'exercice et les notes.
 
-### [SessionCompanionScreen.kt](file:///C:/Users/guip3/AndroidStudioProjects/CoachApp/app/src/main/java/com/example/coachapp/ui/screens/SessionCompanionScreen.kt)
+### 3. Ajustement du layout (IME)
+- Le `Modifier.imePadding()` sur la racine de l'écran garantit que l'ensemble du layout se réduit pour laisser la place au clavier, tandis que le nouveau système de scroll permet de naviguer dans cet espace réduit.
 
-- **Thème Immersif** : Passage sur le fond **Bleu Nuit profond** (`0xFF001529`) pour une cohérence parfaite avec le Dashboard.
-- **Cartes Glassmorphism** : La fiche de séance et l'entrée des notes utilisent désormais le style "verre dépoli" (`0.12f` alpha) avec des bordures fines.
-- **Timer "Instrument de Bord"** :
-    - La progression circulaire est désormais en **Bleu Cyan** (`0xFF00B4D8`).
-    - Typographie agrandie et en blanc pur pour une lecture immédiate.
-    - Utilisation de `StrokeCap.Round` pour un rendu plus moderne.
-- **Timeline Épurée** : Les étapes de la séance à gauche ont été affinées avec des indicateurs de statut plus clairs (Checkmark pour le passé, Cyan pour le présent).
-- **Notes à Chaud** : L'interface de saisie des feedbacks a été simplifiée et stylisée pour être moins intrusive.
+## Vérification
 
-## Résultats des Vérifications
+- [x] Compilation OK (`:app:compileBetaKotlin`).
+- [x] Structure de l'UI : Timeline fixe à gauche, contenu scrollable à droite.
+- [x] Support du clavier : Le champ "Notes à chaud" est désormais accessible même clavier ouvert.
 
-### Compilation
-- Le projet compile avec succès (`./gradlew :app:compileDebugKotlin`).
-- Le fichier `TerrainLaunchScreen.kt` a été supprimé pour nettoyer le projet.
-
-> [!TIP]
-> L'utilisation du Bleu Cyan sur le timer crée un point de focalisation fort, idéal pour suivre le temps restant d'un simple coup d'œil pendant l'exercice.
+render_diffs(file:///C:/Users/guip3/AndroidStudioProjects/CoachApp/app/src/main/java/com/example/coachapp/ui/screens/SessionCompanionScreen.kt)

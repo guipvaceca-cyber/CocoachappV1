@@ -26,75 +26,67 @@ fun CoachSpaceScreen(
     viewModel: com.example.coachapp.ui.CoachViewModel,
     onResourceClick: (LaboResource) -> Unit
 ) {
-    val isGlassTheme = viewModel.coachSpaceTab != 0
-
     Box(
         modifier = modifier
             .fillMaxSize()
-            .background(if (isGlassTheme) Color(0xFF001529) else MaterialTheme.colorScheme.background)
+            .background(Color(0xFF001529))
     ) {
-        if (isGlassTheme) {
-            // Background Blobs for Laboratory/Alerts
-            Box(
-                modifier = Modifier
-                    .offset(x = (-60).dp, y = 150.dp)
-                    .size(200.dp)
-                    .background(Color(0xFF2196F3).copy(alpha = 0.15f), CircleShape)
-                    .blur(70.dp)
-            )
-            Box(
-                modifier = Modifier
-                    .align(Alignment.BottomEnd)
-                    .offset(x = 40.dp, y = 40.dp)
-                    .size(250.dp)
-                    .background(Color(0xFFFF9800).copy(alpha = 0.15f), CircleShape)
-                    .blur(80.dp)
-            )
-        }
+        // Background Blobs (Always visible for consistency)
+        Box(
+            modifier = Modifier
+                .offset(x = (-60).dp, y = 150.dp)
+                .size(200.dp)
+                .background(Color(0xFF2196F3).copy(alpha = 0.15f), CircleShape)
+                .blur(70.dp)
+        )
+        Box(
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .offset(x = 40.dp, y = 40.dp)
+                .size(250.dp)
+                .background(Color(0xFFFF9800).copy(alpha = 0.15f), CircleShape)
+                .blur(80.dp)
+        )
 
         Column(modifier = Modifier.fillMaxSize()) {
             TabRow(
                 selectedTabIndex = viewModel.coachSpaceTab,
-                containerColor = if (isGlassTheme) Color.Transparent else MaterialTheme.colorScheme.surface,
-                contentColor = if (isGlassTheme) Color.White else MaterialTheme.colorScheme.primary,
-                divider = { if (!isGlassTheme) HorizontalDivider() }
+                containerColor = Color.Transparent,
+                contentColor = Color.White,
+                divider = {}
             ) {
                 Tab(
                     selected = viewModel.coachSpaceTab == 0, 
                     onClick = { viewModel.coachSpaceTab = 0 },
-                    unselectedContentColor = if (isGlassTheme) Color.White.copy(alpha = 0.6f) else MaterialTheme.colorScheme.onSurfaceVariant
-                ) {
-                    Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.Forum, null, modifier = Modifier.size(20.dp))
-                        Spacer(Modifier.width(8.dp))
-                        Text("Vestiaire", fontWeight = if (viewModel.coachSpaceTab == 0) FontWeight.Bold else FontWeight.Normal)
-                    }
-                }
+                    unselectedContentColor = Color.White.copy(alpha = 0.6f),
+                    icon = { Icon(Icons.Default.Forum, null, modifier = Modifier.size(20.dp)) },
+                    text = { Text("Vestiaire", fontWeight = if (viewModel.coachSpaceTab == 0) FontWeight.Bold else FontWeight.Normal, fontSize = 12.sp) }
+                )
                 Tab(
                     selected = viewModel.coachSpaceTab == 1, 
                     onClick = { viewModel.coachSpaceTab = 1 },
-                    unselectedContentColor = if (isGlassTheme) Color.White.copy(alpha = 0.6f) else MaterialTheme.colorScheme.onSurfaceVariant
-                ) {
-                    Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.Science, null, modifier = Modifier.size(20.dp))
-                        Spacer(Modifier.width(8.dp))
-                        Text("Laboratoire", fontWeight = if (viewModel.coachSpaceTab == 1) FontWeight.Bold else FontWeight.Normal)
-                    }
-                }
+                    unselectedContentColor = Color.White.copy(alpha = 0.6f),
+                    icon = { Icon(Icons.Default.Science, null, modifier = Modifier.size(20.dp)) },
+                    text = { Text("Labo", fontWeight = if (viewModel.coachSpaceTab == 1) FontWeight.Bold else FontWeight.Normal, fontSize = 12.sp) }
+                )
                 if (viewModel.userRole == UserRole.MEGADMIN) {
                     Tab(
                         selected = viewModel.coachSpaceTab == 2, 
                         onClick = { viewModel.coachSpaceTab = 2 },
-                        unselectedContentColor = if (isGlassTheme) Color.White.copy(alpha = 0.6f) else MaterialTheme.colorScheme.onSurfaceVariant
-                    ) {
-                        Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Badge(containerColor = if (viewModel.adminAlerts.any { it.statut == "non_traite" }) Color.Red else Color.Gray) {
-                                Icon(Icons.Default.Shield, null, tint = Color.White, modifier = Modifier.size(16.dp))
+                        unselectedContentColor = Color.White.copy(alpha = 0.6f),
+                        icon = {
+                            BadgedBox(
+                                badge = {
+                                    if (viewModel.adminAlerts.any { it.statut == "non_traite" }) {
+                                        Badge(containerColor = Color.Red, modifier = Modifier.offset(x = 4.dp, y = (-4).dp))
+                                    }
+                                }
+                            ) {
+                                Icon(Icons.Default.Shield, null, modifier = Modifier.size(20.dp))
                             }
-                            Spacer(Modifier.width(8.dp))
-                            Text("Alertes", fontWeight = if (viewModel.coachSpaceTab == 2) FontWeight.Bold else FontWeight.Normal)
-                        }
-                    }
+                        },
+                        text = { Text("Alertes", fontWeight = if (viewModel.coachSpaceTab == 2) FontWeight.Bold else FontWeight.Normal, fontSize = 12.sp) }
+                    )
                 }
             }
 

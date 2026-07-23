@@ -1,6 +1,8 @@
 package com.example.coachapp.ui.screens
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -9,6 +11,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.DirectionsRun
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -56,34 +59,78 @@ fun SessionBuilderScreen(
         seasonConfig.plannedTrainings.find { it.id == selectedSessionId }
     }
 
+    val context = LocalContext.current
+    val voiceManager = remember { LocalVoiceManager(context) }
+    val isRecordingGlobal by voiceManager.isRecording.collectAsState()
+    val partialTextGlobal by voiceManager.partialText.collectAsState()
+    var activeRecordingLabel by remember { mutableStateOf<String?>(null) }
+
     Scaffold(
         modifier = modifier.fillMaxSize(),
+        containerColor = Color(0xFF001529),
         topBar = {
-            TopAppBar(
-                title = { Text("Préparateur", fontWeight = FontWeight.Black) },
-                navigationIcon = {
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                color = Color.White.copy(alpha = 0.05f),
+                border = androidx.compose.foundation.BorderStroke(0.5.dp, Color.White.copy(alpha = 0.1f))
+            ) {
+                Row(
+                    modifier = Modifier.padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Retour")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Retour", tint = Color.White)
                     }
+                    Text(
+                        "PRÉPARATEUR",
+                        fontWeight = FontWeight.Black,
+                        color = Color.White,
+                        style = MaterialTheme.typography.titleLarge,
+                        modifier = Modifier.padding(start = 8.dp)
+                    )
                 }
-            )
+            }
         }
     ) { innerPadding ->
         Column(modifier = modifier.fillMaxSize().padding(innerPadding).padding(horizontal = 16.dp)) {
             if (sortedSessions.isNotEmpty()) {
                 var expanded by remember { mutableStateOf(false) }
-                Box {
-                    OutlinedButton(onClick = { expanded = true }, modifier = Modifier.fillMaxWidth()) {
-                        val dateStr = session?.date?.format(DateTimeFormatter.ofPattern("dd/MM")) ?: "Choisir une séance"
-                        val teamName = seasonConfig.teams.find { it.id == session?.teamId }?.name ?: ""
-                        Text("$dateStr - $teamName : ${session?.focusArea ?: "Thème non défini"}")
-                        Icon(Icons.Default.ArrowDropDown, null)
+                Box(modifier = Modifier.padding(top = 16.dp)) {
+                    Surface(
+                        modifier = Modifier.fillMaxWidth().clickable { expanded = true },
+                        shape = RoundedCornerShape(16.dp),
+                        color = Color.White.copy(alpha = 0.08f),
+                        border = androidx.compose.foundation.BorderStroke(0.5.dp, Color.White.copy(alpha = 0.15f))
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(16.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            val dateStr = session?.date?.format(DateTimeFormatter.ofPattern("dd/MM")) ?: "Choisir une séance"
+                            val teamName = seasonConfig.teams.find { it.id == session?.teamId }?.name ?: ""
+                            Column {
+                                Text("$dateStr - $teamName", style = MaterialTheme.typography.labelSmall, color = Color(0xFF00B4D8), fontWeight = FontWeight.Bold)
+                                Text(session?.focusArea ?: "Thème non défini", style = MaterialTheme.typography.bodyMedium, color = Color.White, fontWeight = FontWeight.Bold)
+                            }
+                            Icon(Icons.Default.ArrowDropDown, null, tint = Color.White)
+                        }
                     }
-                    DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }, modifier = Modifier.fillMaxWidth(0.9f)) {
+                    
+                    DropdownMenu(
+                        expanded = expanded,
+                        onDismissRequest = { expanded = false },
+                        modifier = Modifier.fillMaxWidth(0.9f).background(Color(0xFF001529)).border(0.5.dp, Color.White.copy(alpha = 0.2f), RoundedCornerShape(8.dp))
+                    ) {
                         sortedSessions.forEach { s ->
                             val team = seasonConfig.teams.find { it.id == s.teamId }
                             DropdownMenuItem(
-                                text = { Text("${s.date.format(DateTimeFormatter.ofPattern("dd/MM"))} - ${team?.name} : ${s.focusArea ?: "Sans thème"}") },
+                                text = { 
+                                    Column {
+                                        Text("${s.date.format(DateTimeFormatter.ofPattern("dd/MM"))} - ${team?.name}", style = MaterialTheme.typography.labelSmall, color = Color(0xFF00B4D8))
+                                        Text(s.focusArea ?: "Sans thème", color = Color.White)
+                                    }
+                                },
                                 onClick = { selectedSessionId = s.id; expanded = false }
                             )
                         }
@@ -99,19 +146,21 @@ fun SessionBuilderScreen(
 
                 LazyColumn(modifier = Modifier.weight(1f)) {
                     item {
-                        Text("MES INTENTIONS", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
-                        Spacer(Modifier.height(8.dp))
+                        Text("MES INTENTIONS", style = MaterialTheme.typography.labelLarge, color = Color(0xFF00B4D8), fontWeight = FontWeight.Black, letterSpacing = 1.2.sp)
+                        Spacer(Modifier.height(12.dp))
                         
                         IntentionCard(
-                            title = "🔍 Intention d'Entraîneur",
-                            subtitle = "Sur quel aspect technique porter mon attention ?",
+                            title = "Intention d'Entraîneur",
+                            icon = Icons.Default.Search,
+                            subtitle = "Aspect technique prioritaire",
                             value = session.trainerIntentions,
                             onValueChange = { onUpdateSession(session.copy(trainerIntentions = it)) }
                         )
                         
                         IntentionCard(
-                            title = "🧠 Intention de Coach",
-                            subtitle = "Comment amener mon élève au but ?",
+                            title = "Intention de Coach",
+                            icon = Icons.Default.Psychology,
+                            subtitle = "Pédagogie et comportement",
                             value = session.coachIntentions,
                             onValueChange = { onUpdateSession(session.copy(coachIntentions = it)) }
                         )
@@ -123,36 +172,126 @@ fun SessionBuilderScreen(
                         item {
                             Card(
                                 modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
-                                colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF7E6)),
-                                border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFE67E22))
+                                shape = RoundedCornerShape(16.dp),
+                                colors = CardDefaults.cardColors(containerColor = Color(0xFFE67E22).copy(alpha = 0.1f)),
+                                border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFE67E22).copy(alpha = 0.4f))
                             ) {
-                                Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                                Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
                                     Icon(Icons.Default.Lightbulb, null, tint = Color(0xFFE67E22))
-                                    Spacer(Modifier.width(8.dp))
+                                    Spacer(Modifier.width(12.dp))
                                     Column {
-                                        Text("NOTE DE LA DERNIÈRE FOIS :", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = Color(0xFFE67E22))
-                                        Text(session.noteForFutureMe, style = MaterialTheme.typography.bodySmall)
+                                        Text("NOTE DE LA DERNIÈRE FOIS", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Black, color = Color(0xFFE67E22))
+                                        Text(session.noteForFutureMe, style = MaterialTheme.typography.bodyMedium, color = Color.White)
                                     }
                                 }
                             }
+                            Spacer(Modifier.height(16.dp))
                         }
                     }
 
                     item {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text("STRUCTURE & TIMING", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
-                            Text("${totalPlanned} / ${session.durationMinutes} min", style = MaterialTheme.typography.labelSmall, color = if (isOverTime) Color.Red else Color.Gray)
+                            Text("STRUCTURE & TIMING", style = MaterialTheme.typography.labelLarge, color = Color(0xFF00B4D8), fontWeight = FontWeight.Black, modifier = Modifier.weight(1f), letterSpacing = 1.2.sp)
+                            Surface(
+                                color = if (isOverTime) Color(0xFFD32F2F).copy(alpha = 0.2f) else Color.White.copy(alpha = 0.1f),
+                                shape = RoundedCornerShape(8.dp),
+                                border = if (isOverTime) androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFD32F2F)) else null
+                            ) {
+                                Text(
+                                    "${totalPlanned} / ${session.durationMinutes} min", 
+                                    style = MaterialTheme.typography.labelMedium, 
+                                    color = if (isOverTime) Color(0xFFD32F2F) else Color.White,
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
                         }
                         if (isOverTime) {
-                            Text("Attention : le cumul dépasse la durée de séance (${session.durationMinutes} min)", color = Color.Red, fontSize = 10.sp)
+                            Text("Attention : le cumul dépasse la durée prévue", color = Color(0xFFD32F2F), fontSize = 10.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 4.dp))
                         }
-                        Spacer(Modifier.height(8.dp))
+                        Spacer(Modifier.height(12.dp))
                     }
 
-                    item { PhaseCard("🤸 Échauffement", session.warmup, session.warmupDuration) { text, dur -> onUpdateSession(session.copy(warmup = text, warmupDuration = dur)) } }
-                    item { PhaseCard("🎯 Gammes", session.drills, session.drillsDuration) { text, dur -> onUpdateSession(session.copy(drills = text, drillsDuration = dur)) } }
-                    item { PhaseCard("👥 Situations réduites", session.smallGroupSituations, session.smallGroupDuration) { text, dur -> onUpdateSession(session.copy(smallGroupSituations = text, smallGroupDuration = dur)) } }
-                    item { PhaseCard("🎮 Jeu collectif", session.collectiveGame, session.collectiveDuration) { text, dur -> onUpdateSession(session.copy(collectiveGame = text, collectiveDuration = dur)) } }
+                    item { 
+                        PhaseCard(
+                            label = "Échauffement", 
+                            icon = Icons.AutoMirrored.Filled.DirectionsRun, 
+                            text = session.warmup, 
+                            duration = session.warmupDuration,
+                            isRecording = isRecordingGlobal && activeRecordingLabel == "Échauffement",
+                            partialText = if (activeRecordingLabel == "Échauffement") partialTextGlobal else "",
+                            onToggleRecording = {
+                                if (isRecordingGlobal) {
+                                    voiceManager.stopListeningAndRecording()
+                                    activeRecordingLabel = null
+                                } else {
+                                    activeRecordingLabel = "Échauffement"
+                                    voiceManager.startListeningAndRecording()
+                                }
+                            },
+                            onUpdate = { text, dur -> onUpdateSession(session.copy(warmup = text, warmupDuration = dur)) }
+                        ) 
+                    }
+                    item { 
+                        PhaseCard(
+                            label = "Gammes", 
+                            icon = Icons.Default.TrackChanges, 
+                            text = session.drills, 
+                            duration = session.drillsDuration,
+                            isRecording = isRecordingGlobal && activeRecordingLabel == "Gammes",
+                            partialText = if (activeRecordingLabel == "Gammes") partialTextGlobal else "",
+                            onToggleRecording = {
+                                if (isRecordingGlobal) {
+                                    voiceManager.stopListeningAndRecording()
+                                    activeRecordingLabel = null
+                                } else {
+                                    activeRecordingLabel = "Gammes"
+                                    voiceManager.startListeningAndRecording()
+                                }
+                            },
+                            onUpdate = { text, dur -> onUpdateSession(session.copy(drills = text, drillsDuration = dur)) }
+                        ) 
+                    }
+                    item { 
+                        PhaseCard(
+                            label = "Situations réduites", 
+                            icon = Icons.Default.Groups, 
+                            text = session.smallGroupSituations, 
+                            duration = session.smallGroupDuration,
+                            isRecording = isRecordingGlobal && activeRecordingLabel == "Situations réduites",
+                            partialText = if (activeRecordingLabel == "Situations réduites") partialTextGlobal else "",
+                            onToggleRecording = {
+                                if (isRecordingGlobal) {
+                                    voiceManager.stopListeningAndRecording()
+                                    activeRecordingLabel = null
+                                } else {
+                                    activeRecordingLabel = "Situations réduites"
+                                    voiceManager.startListeningAndRecording()
+                                }
+                            },
+                            onUpdate = { text, dur -> onUpdateSession(session.copy(smallGroupSituations = text, smallGroupDuration = dur)) }
+                        ) 
+                    }
+                    item { 
+                        PhaseCard(
+                            label = "Jeu collectif", 
+                            icon = Icons.Default.SportsVolleyball, 
+                            text = session.collectiveGame, 
+                            duration = session.collectiveDuration,
+                            isRecording = isRecordingGlobal && activeRecordingLabel == "Jeu collectif",
+                            partialText = if (activeRecordingLabel == "Jeu collectif") partialTextGlobal else "",
+                            onToggleRecording = {
+                                if (isRecordingGlobal) {
+                                    voiceManager.stopListeningAndRecording()
+                                    activeRecordingLabel = null
+                                } else {
+                                    activeRecordingLabel = "Jeu collectif"
+                                    voiceManager.startListeningAndRecording()
+                                }
+                            },
+                            onUpdate = { text, dur -> onUpdateSession(session.copy(collectiveGame = text, collectiveDuration = dur)) }
+                        ) 
+                    }
                     
                     item {
                         Spacer(Modifier.height(32.dp))
@@ -162,15 +301,17 @@ fun SessionBuilderScreen(
                                 onUpdateSession(updated)
                                 onPushSession(updated)
                             },
-                            modifier = Modifier.fillMaxWidth().height(64.dp),
-                            shape = RoundedCornerShape(16.dp),
+                            modifier = Modifier.fillMaxWidth().height(60.dp),
+                            shape = RoundedCornerShape(20.dp),
                             colors = ButtonDefaults.buttonColors(
-                                containerColor = if (session.isValidated) Color(0xFF4CAF50) else MaterialTheme.colorScheme.primary
-                            )
+                                containerColor = if (session.isValidated) Color(0xFF388E3C) else Color(0xFF00B4D8),
+                                contentColor = Color.White
+                            ),
+                            elevation = ButtonDefaults.buttonElevation(defaultElevation = 8.dp)
                         ) {
                             Icon(if (session.isValidated) Icons.Default.CloudDone else Icons.Default.CloudUpload, null)
                             Spacer(Modifier.width(12.dp))
-                            Text(if (session.isValidated) "SÉANCE SYNCHRONISÉE" else "VALIDER & PUSH CLOUD", fontWeight = FontWeight.Black, fontSize = 18.sp)
+                            Text(if (session.isValidated) "SÉANCE SYNCHRONISÉE" else "VALIDER & PUSH CLOUD", fontWeight = FontWeight.Black, fontSize = 16.sp, letterSpacing = 1.sp)
                         }
                         Spacer(Modifier.height(80.dp))
                     }
@@ -181,21 +322,34 @@ fun SessionBuilderScreen(
 }
 
 @Composable
-fun IntentionCard(title: String, subtitle: String, value: String, onValueChange: (String) -> Unit) {
+fun IntentionCard(title: String, icon: androidx.compose.ui.graphics.vector.ImageVector, subtitle: String, value: String, onValueChange: (String) -> Unit) {
     Card(
-        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f))
+        modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.06f)),
+        border = androidx.compose.foundation.BorderStroke(0.5.dp, Color.White.copy(alpha = 0.1f))
     ) {
-        Column(modifier = Modifier.padding(12.dp)) {
-            Text(title, fontWeight = FontWeight.Bold)
-            Text(subtitle, style = MaterialTheme.typography.bodySmall, color = Color.Gray)
-            Spacer(Modifier.height(8.dp))
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(icon, null, tint = Color(0xFF00B4D8), modifier = Modifier.size(20.dp))
+                Spacer(Modifier.width(8.dp))
+                Text(title, fontWeight = FontWeight.Black, color = Color.White, fontSize = 14.sp)
+            }
+            Text(subtitle, style = MaterialTheme.typography.labelSmall, color = Color.White.copy(alpha = 0.5f), modifier = Modifier.padding(start = 28.dp))
+            Spacer(Modifier.height(12.dp))
             OutlinedTextField(
                 value = value,
                 onValueChange = onValueChange,
-                modifier = Modifier.fillMaxWidth().height(80.dp),
-                textStyle = MaterialTheme.typography.bodyMedium,
-                placeholder = { Text("Ex: Placement des pieds, communication...") }
+                modifier = Modifier.fillMaxWidth().height(90.dp),
+                textStyle = MaterialTheme.typography.bodyMedium.copy(color = Color.White),
+                placeholder = { Text("Ex: Placement des pieds, communication...", color = Color.White.copy(alpha = 0.3f), fontSize = 13.sp) },
+                shape = RoundedCornerShape(12.dp),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = Color(0xFF00B4D8),
+                    unfocusedBorderColor = Color.White.copy(alpha = 0.1f),
+                    focusedContainerColor = Color.White.copy(alpha = 0.05f),
+                    unfocusedContainerColor = Color.Transparent
+                )
             )
         }
     }
@@ -204,18 +358,19 @@ fun IntentionCard(title: String, subtitle: String, value: String, onValueChange:
 @Composable
 fun PhaseCard(
     label: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
     text: String,
     duration: Int,
+    isRecording: Boolean,
+    partialText: String,
+    onToggleRecording: () -> Unit,
     onUpdate: (String, Int) -> Unit
 ) {
     val context = LocalContext.current
-    val voiceManager = remember { LocalVoiceManager(context) }
-    val partialText by voiceManager.partialText.collectAsState()
-    val isRecordingLocal by voiceManager.isRecording.collectAsState()
     var baseText by remember { mutableStateOf("") }
 
     LaunchedEffect(partialText) {
-        if (isRecordingLocal && partialText.isNotBlank()) {
+        if (isRecording && partialText.isNotBlank()) {
             val combined = if (baseText.isBlank()) partialText else "$baseText\n$partialText"
             onUpdate(combined, duration)
         }
@@ -226,78 +381,96 @@ fun PhaseCard(
     ) { granted ->
         if (granted) {
             baseText = text
-            voiceManager.startListeningAndRecording()
+            onToggleRecording()
         }
     }
 
     Card(
-        modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+        modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+        shape = RoundedCornerShape(24.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.08f)),
+        border = androidx.compose.foundation.BorderStroke(0.5.dp, Color.White.copy(alpha = 0.15f))
     ) {
-        Column(modifier = Modifier.padding(12.dp)) {
+        Column(modifier = Modifier.padding(16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(icon, null, tint = Color(0xFF00B4D8), modifier = Modifier.size(20.dp))
+                Spacer(Modifier.width(8.dp))
                 Text(
                     label,
-                    fontWeight = FontWeight.ExtraBold,
-                    modifier = Modifier.weight(1f)
+                    fontWeight = FontWeight.Black,
+                    color = Color.White,
+                    modifier = Modifier.weight(1f),
+                    fontSize = 15.sp
                 )
                 // Contrôle durée
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier
                         .background(
-                            MaterialTheme.colorScheme.surfaceVariant,
-                            RoundedCornerShape(8.dp)
+                            Color.White.copy(alpha = 0.1f),
+                            RoundedCornerShape(12.dp)
                         )
-                        .padding(horizontal = 8.dp)
+                        .padding(horizontal = 4.dp)
                 ) {
                     IconButton(
                         onClick = { if (duration > 5) onUpdate(text, duration - 5) },
-                        modifier = Modifier.size(24.dp)
+                        modifier = Modifier.size(32.dp)
                     ) {
-                        Icon(Icons.Default.Remove, null, modifier = Modifier.size(16.dp))
+                        Icon(Icons.Default.Remove, null, modifier = Modifier.size(16.dp), tint = Color.White)
                     }
                     Text(
-                        "$duration min",
-                        style = MaterialTheme.typography.labelMedium,
-                        modifier = Modifier.padding(horizontal = 8.dp)
+                        "$duration'",
+                        style = MaterialTheme.typography.labelLarge,
+                        modifier = Modifier.padding(horizontal = 4.dp),
+                        color = Color(0xFF00B4D8),
+                        fontWeight = FontWeight.Black
                     )
                     IconButton(
                         onClick = { onUpdate(text, duration + 5) },
-                        modifier = Modifier.size(24.dp)
+                        modifier = Modifier.size(32.dp)
                     ) {
-                        Icon(Icons.Default.Add, null, modifier = Modifier.size(16.dp))
+                        Icon(Icons.Default.Add, null, modifier = Modifier.size(16.dp), tint = Color.White)
                     }
                 }
             }
 
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(12.dp))
 
             OutlinedTextField(
                 value = text,
                 onValueChange = { onUpdate(it, duration) },
-                modifier = Modifier.fillMaxWidth().height(100.dp),
-                placeholder = { Text("Détail de l'exercice...") },
+                modifier = Modifier.fillMaxWidth().height(110.dp),
+                textStyle = MaterialTheme.typography.bodyMedium.copy(color = Color.White),
+                placeholder = { Text("Détail de l'exercice...", color = Color.White.copy(alpha = 0.3f), fontSize = 13.sp) },
+                shape = RoundedCornerShape(16.dp),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = Color(0xFF00B4D8),
+                    unfocusedBorderColor = Color.White.copy(alpha = 0.1f),
+                    focusedContainerColor = Color.White.copy(alpha = 0.05f),
+                    unfocusedContainerColor = Color.Transparent
+                ),
                 trailingIcon = {
-                    if (isRecordingLocal) {
-                        IconButton(onClick = {
-                            val file = voiceManager.stopListeningAndRecording()
-                            voiceManager.deleteFile(file)
-                        }) {
+                    if (isRecording) {
+                        IconButton(onClick = onToggleRecording) {
                             Icon(
                                 Icons.Default.Stop,
                                 null,
-                                tint = Color.Red
+                                tint = Color(0xFFD32F2F)
                             )
                         }
                     } else {
                         IconButton(onClick = {
-                            permissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+                            if (androidx.core.content.ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                                baseText = text
+                                onToggleRecording()
+                            } else {
+                                permissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+                            }
                         }) {
                             Icon(
                                 Icons.Default.Mic,
                                 null,
-                                tint = MaterialTheme.colorScheme.primary
+                                tint = Color(0xFF00B4D8)
                             )
                         }
                     }
@@ -305,25 +478,26 @@ fun PhaseCard(
             )
 
             // Indicateur d'enregistrement
-            if (isRecordingLocal) {
-                Spacer(Modifier.height(4.dp))
+            if (isRecording) {
+                Spacer(Modifier.height(8.dp))
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.fillMaxWidth().background(Color(0xFFD32F2F).copy(alpha = 0.1f), RoundedCornerShape(8.dp)).padding(8.dp)
                 ) {
                     Box(
                         modifier = Modifier
                             .size(8.dp)
-                            .background(Color.Red, CircleShape)
+                            .background(Color(0xFFD32F2F), CircleShape)
                     )
                     Text(
-                        "Enregistrement en cours... Appuie sur ⏹ pour arrêter",
+                        "Enregistrement vocal actif...",
                         fontSize = 11.sp,
-                        color = Color.Red
+                        color = Color(0xFFD32F2F),
+                        fontWeight = FontWeight.Bold
                     )
                 }
             }
-
         }
     }
 }

@@ -86,9 +86,14 @@ fun DashboardScreen(
         }
     }
 
-    val readySessionsByTeam = remember(seasonConfig.plannedTrainings) {
+    val readySessionsByTeam = remember(seasonConfig.plannedTrainings, now) {
         seasonConfig.plannedTrainings
-            .filter { it.isValidated && !it.date.isBefore(today) }
+            .filter { session -> 
+                session.isValidated && (
+                    session.date.isAfter(today) || 
+                    (session.date == today && now.toLocalTime().isBefore(session.startTime.plusMinutes(session.durationMinutes.toLong())))
+                )
+            }
             .sortedBy { it.date }
             .groupBy { it.teamId }
     }
@@ -548,7 +553,7 @@ fun HeaderSection(profile: CoachProfile) {
                             )
                             Spacer(Modifier.width(4.dp))
                             Text(
-                                text = "v0.4",
+                                text = "v0.5",
                                 color = Color.White.copy(alpha = 0.5f),
                                 fontSize = 10.sp,
                                 fontWeight = FontWeight.Bold,

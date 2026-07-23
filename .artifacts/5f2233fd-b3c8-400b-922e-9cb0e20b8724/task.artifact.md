@@ -1,0 +1,4 @@
+- [x] Update Supabase `upsert` calls in `CdeVivierParser.kt`
+- [x] Update Supabase `upsert` calls in `CoachViewModel.kt`
+- [x] Update Supabase `upsert` calls in `TrainingRepository.kt`
+- [x] Verify compilation with `./gradlew :app:compileBetaKotlin` (The original errors are gone; remaining errors are unrelated to `upsert`)

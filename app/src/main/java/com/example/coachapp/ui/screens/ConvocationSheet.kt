@@ -82,7 +82,6 @@ fun ConvocationSheet(
     onSlotChange: (index: Int, type: String, joueur: JoueurSlot?) -> Unit = { _, _, _ -> },
     onSauvegarder: (principal: List<JoueurSlot?>, banc: List<JoueurSlot?>) -> Unit = { _, _ -> }
 ) {
-    android.util.Log.d("DEBUG_CDE", "ConvocationSheet isVisible = $isVisible")
     if (!isVisible) return
 
     val quota = quotaParCategorie(cdeCategorie)
@@ -179,10 +178,12 @@ fun ConvocationSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
         modifier = Modifier.fillMaxHeight(0.92f),
-        shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
+        containerColor = Color(0xFF001529),
+        contentColor = Color.White,
+        scrimColor = Color.Black.copy(alpha = 0.6f),
         dragHandle = {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                BottomSheetDefaults.DragHandle()
+                BottomSheetDefaults.DragHandle(color = Color.White.copy(alpha = 0.3f))
                 Row(
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp).padding(bottom = 12.dp),
                     verticalAlignment = Alignment.CenterVertically
@@ -190,55 +191,60 @@ fun ConvocationSheet(
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
                             if (isEditable) "Convocation $cdeCategorie" else "Sélection $cdeCategorie",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold
+                            style = MaterialTheme.typography.headlineSmall,
+                            fontWeight = FontWeight.Black,
+                            color = Color.White
                         )
                         Text(
                             if (isEditable) "Sélectionne $quota joueurs" else "Liste des joueurs convoqués",
                             style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                            color = Color.White.copy(alpha = 0.5f)
                         )
                     }
                     val nbPrincipal = slotsPrincipal.count { it != null }
                     
                     if (isEditable) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            // Bouton Enregistrer (toujours visible)
-                            TextButton(
+                            IconButton(
                                 onClick = {
                                     onSauvegarder(slotsPrincipal.toList(), slotsBanc.toList())
                                     scope.launch { sheetState.hide(); onDismiss() }
                                 },
-                                modifier = Modifier.padding(end = 8.dp)
+                                modifier = Modifier
+                                    .padding(end = 8.dp)
+                                    .background(Color.White.copy(alpha = 0.1f), CircleShape)
+                                    .size(40.dp)
                             ) {
-                                Icon(Icons.Default.Save, null, modifier = Modifier.size(18.dp))
-                                Spacer(Modifier.width(4.dp))
-                                Text("Enregistrer", fontSize = 13.sp)
+                                Icon(Icons.Default.Save, null, modifier = Modifier.size(20.dp), tint = Color.White)
                             }
 
-                            // Bouton Envoyer (activé seulement si quota atteint)
                             Button(
                                 onClick = {
-                                    // Logique d'envoi final (passer en statut ENVOYÉ par ex)
                                     onSauvegarder(slotsPrincipal.toList(), slotsBanc.toList())
                                     scope.launch { sheetState.hide(); onDismiss() }
                                 },
                                 enabled = nbPrincipal == quota,
                                 colors = ButtonDefaults.buttonColors(
-                                    containerColor = Color(0xFF1D9E75)
+                                    containerColor = Color(0xFF1D9E75),
+                                    contentColor = Color.White,
+                                    disabledContainerColor = Color.White.copy(alpha = 0.1f),
+                                    disabledContentColor = Color.White.copy(alpha = 0.3f)
                                 ),
-                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
-                                shape = RoundedCornerShape(8.dp)
+                                contentPadding = PaddingValues(horizontal = 16.dp),
+                                shape = RoundedCornerShape(12.dp),
+                                modifier = Modifier.height(40.dp)
                             ) {
                                 Icon(Icons.AutoMirrored.Filled.Send, null, modifier = Modifier.size(16.dp))
-                                Spacer(Modifier.width(6.dp))
-                                Text("Envoyer", fontSize = 13.sp)
+                                Spacer(Modifier.width(8.dp))
+                                Text("Envoyer", fontSize = 14.sp, fontWeight = FontWeight.Bold)
                             }
                         }
                     } else {
-                        // Close button for read-only mode
-                        IconButton(onClick = { scope.launch { sheetState.hide(); onDismiss() } }) {
-                            Icon(Icons.Default.Close, null)
+                        IconButton(
+                            onClick = { scope.launch { sheetState.hide(); onDismiss() } },
+                            modifier = Modifier.background(Color.White.copy(alpha = 0.1f), CircleShape).size(40.dp)
+                        ) {
+                            Icon(Icons.Default.Close, null, tint = Color.White)
                         }
                     }
                 }
@@ -249,7 +255,6 @@ fun ConvocationSheet(
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 32.dp)
         ) {
-            // ---- TABLEAU PRINCIPAL ----
             item {
                 SectionHeader(
                     label = "Tableau principal",
@@ -277,7 +282,6 @@ fun ConvocationSheet(
                     isLocked = isLocked
                 )
 
-                // Dropdown sous le slot actif
                 if (slotActifIndex == index && slotActifType == "PRINCIPAL" && resultats.isNotEmpty()) {
                     DropdownResultats(
                         resultats = resultats,
@@ -287,7 +291,6 @@ fun ConvocationSheet(
                 }
             }
 
-            // ---- BANC DES REMPLAÇANTS ----
             item {
                 Spacer(Modifier.height(20.dp))
                 SectionHeader(
@@ -330,35 +333,49 @@ fun ConvocationSheet(
     }
 }
 
-// ----------------------------------------------------------------
-// En-tête de section
-// ----------------------------------------------------------------
 @Composable
 fun SectionHeader(label: String, remplis: Int, total: Int, optionnel: Boolean = false) {
     Row(
-        modifier = Modifier.fillMaxWidth().padding(vertical = 10.dp),
+        modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Text(label, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+        Box(
+            modifier = Modifier
+                .width(3.dp)
+                .height(14.dp)
+                .background(Color(0xFF00B4D8), RoundedCornerShape(2.dp))
+        )
+        Spacer(Modifier.width(8.dp))
+        Text(
+            text = label.uppercase(), 
+            style = MaterialTheme.typography.labelMedium, 
+            fontWeight = FontWeight.Black,
+            color = Color.White.copy(alpha = 0.7f),
+            letterSpacing = 1.sp
+        )
         if (optionnel) {
             Spacer(Modifier.width(6.dp))
             Text("(optionnel)", style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant)
+                color = Color.White.copy(alpha = 0.4f))
         }
         Spacer(Modifier.weight(1f))
         val complet = remplis == total
-        Text(
-            "$remplis / $total",
-            style = MaterialTheme.typography.labelSmall,
-            color = if (complet) Color(0xFF1D9E75) else MaterialTheme.colorScheme.onSurfaceVariant,
-            fontWeight = if (complet) FontWeight.Bold else FontWeight.Normal
-        )
+        Surface(
+            color = if (complet) Color(0xFF1D9E75).copy(alpha = 0.2f) else Color.White.copy(alpha = 0.05f),
+            shape = RoundedCornerShape(6.dp),
+            border = androidx.compose.foundation.BorderStroke(0.5.dp, if (complet) Color(0xFF1D9E75) else Color.White.copy(alpha = 0.1f))
+        ) {
+            Text(
+                "$remplis / $total",
+                modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                style = MaterialTheme.typography.labelSmall,
+                color = if (complet) Color(0xFF1D9E75) else Color.White,
+                fontWeight = FontWeight.Black
+            )
+        }
     }
 }
 
-// ----------------------------------------------------------------
-// Ligne de slot
-// ----------------------------------------------------------------
 @Composable
 fun SlotRow(
     numero: Int,
@@ -378,197 +395,205 @@ fun SlotRow(
     }
 
     val bgColor = when {
-        isActive -> Color(0xFFE6F1FB)
-        slot?.statut == StatutSlot.INSCRIT || slot?.statut == StatutSlot.CONFIRME -> Color.LightGray.copy(alpha = 0.2f)
-        slot?.statut == StatutSlot.PROMU -> Color(0xFFE1F5EE)
-        slot?.statut == StatutSlot.INDISPONIBLE -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
-        slot != null -> MaterialTheme.colorScheme.surface
-        else -> Color.Transparent
+        isActive -> Color(0xFF00B4D8).copy(alpha = 0.15f)
+        slot?.statut == StatutSlot.INSCRIT || slot?.statut == StatutSlot.CONFIRME -> Color.White.copy(alpha = 0.08f)
+        slot?.statut == StatutSlot.PROMU -> Color(0xFF1D9E75).copy(alpha = 0.12f)
+        slot?.statut == StatutSlot.INDISPONIBLE -> Color.White.copy(alpha = 0.03f)
+        slot != null -> Color.White.copy(alpha = 0.06f)
+        else -> Color.White.copy(alpha = 0.03f)
     }
 
-    Row(
+    val borderColor = if (isActive) Color(0xFF00B4D8) else Color.White.copy(alpha = 0.1f)
+
+    Card(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 3.dp)
-            .clip(RoundedCornerShape(10.dp))
-            .background(bgColor)
+            .padding(vertical = 4.dp)
             .then(if (slot == null && !isActive && !isLocked) Modifier.clickable { onTap() } else Modifier),
-        verticalAlignment = Alignment.CenterVertically
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(containerColor = bgColor),
+        border = androidx.compose.foundation.BorderStroke(if (isActive) 1.dp else 0.5.dp, borderColor)
     ) {
-        // Numéro
-        Text(
-            "$numero",
-            modifier = Modifier.width(28.dp).padding(start = 8.dp),
-            fontSize = 11.sp,
-            color = if (isActive) Color(0xFF185FA5) else MaterialTheme.colorScheme.onSurfaceVariant
-        )
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // Numéro
+            Text(
+                "$numero",
+                modifier = Modifier.width(28.dp),
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Black,
+                color = if (isActive) Color(0xFF00B4D8) else Color.White.copy(alpha = 0.3f)
+            )
 
-        // Contenu
-        when {
-            slot != null -> {
-                // Joueur sélectionné
-                val alpha = if (slot.statut == StatutSlot.INDISPONIBLE) 0.4f else 1f
+            // Contenu
+            when {
+                slot != null -> {
+                    // Joueur sélectionné
+                    val alpha = if (slot.statut == StatutSlot.INDISPONIBLE) 0.4f else 1f
 
-                Box(
-                    modifier = Modifier
-                        .size(32.dp)
-                        .clip(CircleShape)
-                        .background(
-                            if (slot.estSurclasse) Color(0xFFFAEEDA)
-                            else Color(0xFFE6F1FB)
-                        ),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        initiales(slot.prenom, slot.nom),
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = if (slot.estSurclasse) Color(0xFF633806) else Color(0xFF0C447C)
-                    )
-                }
-
-                Spacer(Modifier.width(10.dp))
-
-                Column(modifier = Modifier.weight(1f)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        modifier = Modifier
+                            .size(32.dp)
+                            .clip(CircleShape)
+                            .background(
+                                if (slot.estSurclasse) Color(0xFFFAEEDA)
+                                else Color(0xFFE6F1FB)
+                            ),
+                        contentAlignment = Alignment.Center
+                    ) {
                         Text(
-                            "${slot.prenom} ${slot.nom}",
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.Medium,
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = alpha),
+                            initiales(slot.prenom, slot.nom),
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Black,
+                            color = if (slot.estSurclasse) Color(0xFF633806) else Color(0xFF0C447C)
+                        )
+                    }
+
+                    Spacer(Modifier.width(12.dp))
+
+                    Column(modifier = Modifier.weight(1f)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                "${slot.prenom} ${slot.nom}",
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White.copy(alpha = alpha),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                            if (slot.estSurclasse) {
+                                Spacer(Modifier.width(6.dp))
+                                Text(
+                                    "SURCL.",
+                                    fontSize = 8.sp,
+                                    fontWeight = FontWeight.Black,
+                                    color = Color(0xFF633806),
+                                    modifier = Modifier
+                                        .background(Color(0xFFFAEEDA), RoundedCornerShape(4.dp))
+                                        .padding(horizontal = 5.dp, vertical = 1.dp)
+                                )
+                            }
+                            if (slot.statut == StatutSlot.PROMU) {
+                                Spacer(Modifier.width(6.dp))
+                                Text(
+                                    "↑ PROMU",
+                                    fontSize = 8.sp,
+                                    fontWeight = FontWeight.Black,
+                                    color = Color(0xFFE1F5EE),
+                                    modifier = Modifier
+                                        .background(Color(0xFF1D9E75).copy(alpha = 0.5f), RoundedCornerShape(4.dp))
+                                        .padding(horizontal = 5.dp, vertical = 1.dp)
+                                )
+                            }
+                        }
+                        Text(
+                            "${slot.club} · ${slot.categorie}",
+                            fontSize = 11.sp,
+                            color = Color.White.copy(alpha = 0.5f * alpha),
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
-                        if (slot.estSurclasse) {
-                            Spacer(Modifier.width(4.dp))
-                            Text(
-                                "Surcl.",
-                                fontSize = 9.sp,
-                                color = Color(0xFF633806),
-                                modifier = Modifier
-                                    .background(Color(0xFFFAEEDA), RoundedCornerShape(4.dp))
-                                    .padding(horizontal = 4.dp, vertical = 1.dp)
-                            )
-                        }
-                        if (slot.statut == StatutSlot.PROMU) {
-                            Spacer(Modifier.width(4.dp))
-                            Text(
-                                "↑ promu",
-                                fontSize = 9.sp,
-                                color = Color(0xFF085041),
-                                modifier = Modifier
-                                    .background(Color(0xFFE1F5EE), RoundedCornerShape(4.dp))
-                                    .padding(horizontal = 4.dp, vertical = 1.dp)
-                            )
-                        }
                     }
-                    Text(
-                        "${slot.club} · ${slot.categorie}",
-                        fontSize = 11.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = alpha),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
 
-                Spacer(Modifier.width(8.dp))
+                    Spacer(Modifier.width(8.dp))
 
-                // Statut dot
-                val dotColor = when (slot.statut) {
-                    StatutSlot.CONFIRME, StatutSlot.INSCRIT -> Color(0xFF1D9E75)
-                    StatutSlot.INDISPONIBLE -> Color(0xFF888780)
-                    StatutSlot.PROMU -> Color(0xFF1D9E75)
-                    StatutSlot.ERREUR -> Color(0xFF993C1D)
-                    else -> Color(0xFF378ADD)
-                }
-                Box(modifier = Modifier.size(6.dp).clip(CircleShape).background(dotColor))
+                    // Statut dot
+                    val dotColor = when (slot.statut) {
+                        StatutSlot.CONFIRME, StatutSlot.INSCRIT -> Color(0xFF1D9E75)
+                        StatutSlot.INDISPONIBLE -> Color.Red
+                        StatutSlot.PROMU -> Color(0xFF1D9E75)
+                        StatutSlot.ERREUR -> Color.Red
+                        else -> Color(0xFF00B4D8)
+                    }
+                    Box(modifier = Modifier.size(8.dp).clip(CircleShape).background(dotColor))
 
-                Spacer(Modifier.width(8.dp))
+                    Spacer(Modifier.width(12.dp))
 
-                // Bouton retirer (caché si verrouillé)
-                if (!isLocked) {
-                    IconButton(
-                        onClick = onRetirer,
-                        modifier = Modifier.size(32.dp)
-                    ) {
+                    // Bouton retirer (caché si verrouillé)
+                    if (!isLocked) {
+                        IconButton(
+                            onClick = onRetirer,
+                            modifier = Modifier.size(32.dp).background(Color.White.copy(alpha = 0.05f), CircleShape)
+                        ) {
+                            Icon(
+                                Icons.Default.Close,
+                                contentDescription = "Retirer",
+                                modifier = Modifier.size(14.dp),
+                                tint = Color.White.copy(alpha = 0.6f)
+                            )
+                        }
+                    } else {
                         Icon(
-                            Icons.Default.Close,
-                            contentDescription = "Retirer",
-                            modifier = Modifier.size(14.dp),
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                            Icons.Default.Lock,
+                            contentDescription = "Verrouillé",
+                            modifier = Modifier.size(16.dp).padding(horizontal = 4.dp),
+                            tint = Color.White.copy(alpha = 0.3f)
                         )
                     }
-                } else {
+                }
+
+                isActive -> {
+                    // Champ de recherche actif
                     Icon(
-                        Icons.Default.Lock,
-                        contentDescription = "Verrouillé",
-                        modifier = Modifier.size(14.dp).padding(horizontal = 8.dp),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                        Icons.Default.Search,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp),
+                        tint = Color(0xFF00B4D8)
+                    )
+                    Spacer(Modifier.width(12.dp))
+                    BasicTextField(
+                        value = query,
+                        onValueChange = onQueryChange,
+                        modifier = Modifier.weight(1f).focusRequester(focusRequester),
+                        textStyle = TextStyle(
+                            fontSize = 14.sp,
+                            color = Color.White,
+                            fontWeight = FontWeight.Medium,
+                            fontFamily = androidx.compose.ui.text.font.FontFamily.Default
+                        ),
+                        cursorBrush = SolidColor(Color(0xFF00B4D8)),
+                        singleLine = true,
+                        decorationBox = { inner ->
+                            Box {
+                                if (query.isEmpty()) {
+                                    Text(
+                                        "Rechercher un joueur…",
+                                        fontSize = 14.sp,
+                                        color = Color.White.copy(alpha = 0.3f)
+                                    )
+                                }
+                                inner()
+                            }
+                        }
+                    )
+                    Spacer(Modifier.width(8.dp))
+                }
+
+                else -> {
+                    // Slot vide — invitation à taper
+                    Icon(
+                        Icons.Default.Search,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp),
+                        tint = Color.White.copy(alpha = 0.2f)
+                    )
+                    Spacer(Modifier.width(12.dp))
+                    Text(
+                        "Rechercher un joueur…",
+                        fontSize = 14.sp,
+                        color = Color.White.copy(alpha = 0.2f),
+                        modifier = Modifier.weight(1f)
                     )
                 }
             }
-
-            isActive -> {
-                // Champ de recherche actif
-                Icon(
-                    Icons.Default.Search,
-                    contentDescription = null,
-                    modifier = Modifier.size(16.dp),
-                    tint = Color(0xFF185FA5)
-                )
-                Spacer(Modifier.width(8.dp))
-                BasicTextField(
-                    value = query,
-                    onValueChange = onQueryChange,
-                    modifier = Modifier.weight(1f).focusRequester(focusRequester),
-                    textStyle = TextStyle(
-                        fontSize = 13.sp,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        fontFamily = androidx.compose.ui.text.font.FontFamily.Default
-                    ),
-                    cursorBrush = SolidColor(Color(0xFF185FA5)),
-                    singleLine = true,
-                    decorationBox = { inner ->
-                        Box {
-                            if (query.isEmpty()) {
-                                Text(
-                                    "Rechercher un joueur…",
-                                    fontSize = 13.sp,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                            inner()
-                        }
-                    }
-                )
-                Spacer(Modifier.width(8.dp))
-            }
-
-            else -> {
-                // Slot vide — invitation à taper
-                Icon(
-                    Icons.Default.Search,
-                    contentDescription = null,
-                    modifier = Modifier.size(16.dp),
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Spacer(Modifier.width(8.dp))
-                Text(
-                    "Rechercher un joueur…",
-                    fontSize = 13.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.weight(1f)
-                )
-            }
         }
-
-        Spacer(Modifier.width(if (slot == null && !isActive) 8.dp else 0.dp))
     }
 }
 
-// ----------------------------------------------------------------
-// Liste déroulante des résultats
-// ----------------------------------------------------------------
 @Composable
 fun DropdownResultats(
     resultats: List<Pair<JoueurVivier, Boolean>>,
@@ -579,18 +604,21 @@ fun DropdownResultats(
     val m13s = resultats.filter { it.second }
 
     Card(
-        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-        shape = RoundedCornerShape(10.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        border = androidx.compose.foundation.BorderStroke(0.5.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.3f))
+        modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF002147)),
+        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF00B4D8).copy(alpha = 0.3f)),
+        elevation = CardDefaults.cardElevation(defaultElevation = 12.dp)
     ) {
         Column {
             if (m15.isNotEmpty()) {
                 Text(
-                    "Catégorie principale",
-                    modifier = Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)).padding(horizontal = 12.dp, vertical = 5.dp),
+                    "CATÉGORIE PRINCIPALE",
+                    modifier = Modifier.fillMaxWidth().background(Color.White.copy(alpha = 0.05f)).padding(horizontal = 16.dp, vertical = 8.dp),
                     fontSize = 10.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    fontWeight = FontWeight.Black,
+                    color = Color(0xFF00B4D8),
+                    letterSpacing = 1.sp
                 )
                 m15.forEach { (joueur, _) ->
                     ResultatItem(joueur = joueur, isSurclasse = false, onSelect = onSelect)
@@ -598,10 +626,12 @@ fun DropdownResultats(
             }
             if (m13s.isNotEmpty()) {
                 Text(
-                    "Surclassés (${m13s.first().first.categorie})",
-                    modifier = Modifier.fillMaxWidth().background(Color(0xFFFAEEDA).copy(alpha = 0.5f)).padding(horizontal = 12.dp, vertical = 5.dp),
+                    "SURCLASSÉS (${m13s.first().first.categorie})",
+                    modifier = Modifier.fillMaxWidth().background(Color(0xFFFAEEDA).copy(alpha = 0.05f)).padding(horizontal = 16.dp, vertical = 8.dp),
                     fontSize = 10.sp,
-                    color = Color(0xFF633806)
+                    fontWeight = FontWeight.Black,
+                    color = Color(0xFFFAEEDA),
+                    letterSpacing = 1.sp
                 )
                 m13s.forEach { (joueur, _) ->
                     ResultatItem(joueur = joueur, isSurclasse = true, onSelect = onSelect)
@@ -621,63 +651,64 @@ fun ResultatItem(
         modifier = Modifier
             .fillMaxWidth()
             .clickable { onSelect(joueur) }
-            .padding(horizontal = 12.dp, vertical = 10.dp),
+            .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Box(
             modifier = Modifier
-                .size(34.dp)
+                .size(36.dp)
                 .clip(CircleShape)
-                .background(if (isSurclasse) Color(0xFFFAEEDA) else Color(0xFFE6F1FB)),
+                .background(if (isSurclasse) Color(0xFFFAEEDA) else Color(0xFF00B4D8).copy(alpha = 0.2f)),
             contentAlignment = Alignment.Center
         ) {
             Text(
                 initiales(joueur.prenom, joueur.nom),
                 fontSize = 11.sp,
-                fontWeight = FontWeight.Bold,
-                color = if (isSurclasse) Color(0xFF633806) else Color(0xFF0C447C)
+                fontWeight = FontWeight.Black,
+                color = if (isSurclasse) Color(0xFF633806) else Color.White
             )
         }
 
-        Spacer(Modifier.width(10.dp))
+        Spacer(Modifier.width(12.dp))
 
         Column(modifier = Modifier.weight(1f)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     "${joueur.prenom} ${joueur.nom}",
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = MaterialTheme.colorScheme.onSurface,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
                 if (isSurclasse) {
-                    Spacer(Modifier.width(4.dp))
+                    Spacer(Modifier.width(6.dp))
                     Text(
-                        "Surcl.",
-                        fontSize = 9.sp,
+                        "SURCL.",
+                        fontSize = 8.sp,
+                        fontWeight = FontWeight.Black,
                         color = Color(0xFF633806),
                         modifier = Modifier
                             .background(Color(0xFFFAEEDA), RoundedCornerShape(4.dp))
-                            .padding(horizontal = 4.dp, vertical = 1.dp)
+                            .padding(horizontal = 5.dp, vertical = 1.dp)
                     )
                 }
             }
             Text(
                 "${joueur.club} · ${joueur.categorie}${if (joueur.taille > 0) " · ${joueur.taille}cm" else ""}",
                 fontSize = 11.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                color = Color.White.copy(alpha = 0.5f),
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
         }
 
         Icon(
-            Icons.Default.Add,
+            Icons.Default.AddCircle,
             contentDescription = "Ajouter",
-            modifier = Modifier.size(16.dp),
-            tint = MaterialTheme.colorScheme.onSurfaceVariant
+            modifier = Modifier.size(20.dp),
+            tint = Color(0xFF00B4D8)
         )
     }
-    HorizontalDivider(thickness = 0.5.dp, color = MaterialTheme.colorScheme.outline.copy(alpha = 0.15f))
+    HorizontalDivider(thickness = 0.5.dp, color = Color.White.copy(alpha = 0.05f))
 }

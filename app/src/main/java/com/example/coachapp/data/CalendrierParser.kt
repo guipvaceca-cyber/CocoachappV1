@@ -76,6 +76,8 @@ object CalendrierParser {
                                         "CUP"        -> CompetitionType.CUP
                                         "TOURNAMENT" -> CompetitionType.TOURNAMENT
                                         "FRIENDLY"   -> CompetitionType.FRIENDLY
+                                        "STAGE"      -> CompetitionType.STAGE
+                                        "SELECTION"  -> CompetitionType.SELECTION
                                         else         -> CompetitionType.CHAMPIONSHIP
                                     }
                                     val startTime = runCatching {
@@ -89,7 +91,7 @@ object CalendrierParser {
                                             date = LocalDate.parse(date),
                                             startTime = startTime,
                                             type = competitionType,
-                                            opponent = "À définir",
+                                            opponent = description ?: "À définir",
                                             location = lieu ?: "À définir",
                                             attendance = emptyMap()
                                         )

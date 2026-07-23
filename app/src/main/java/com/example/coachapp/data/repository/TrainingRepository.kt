@@ -3,7 +3,7 @@ package com.example.coachapp.data.repository
 import com.example.coachapp.data.*
 import com.example.coachapp.data.model.*
 import io.github.jan.supabase.SupabaseClient
-import io.github.jan.supabase.gotrue.auth
+import io.github.jan.supabase.auth.auth
 import io.github.jan.supabase.postgrest.from
 import io.github.jan.supabase.postgrest.query.Columns
 import io.github.jan.supabase.postgrest.query.Order
@@ -129,7 +129,9 @@ class TrainingRepository(
             }
             
             if (presences.isNotEmpty()) {
-                val result = supabase.from("coplayer_presence").upsert(presences, ignoreDuplicates = true)
+                supabase.from("coplayer_presence").upsert(presences) {
+                    ignoreDuplicates = true
+                }
                 android.util.Log.d("TRAINING_REPO", "Convocations réussies: ${presences.size} joueurs")
             } else {
                 android.util.Log.w("TRAINING_REPO", "Aucun compte CoPlayer trouvé pour les joueurs de ce collectif")

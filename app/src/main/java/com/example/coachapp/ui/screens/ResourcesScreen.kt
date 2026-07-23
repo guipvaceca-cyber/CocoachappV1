@@ -20,10 +20,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.coachapp.data.*
 import com.example.coachapp.ui.components.TacticalBoardOverlay
+import com.example.coachapp.ui.util.PdfLauncher
 import java.util.*
 
 @Composable
@@ -33,6 +35,10 @@ fun ResourcesScreen(
     onResourceClick: (LaboResource) -> Unit
 ) {
     var showCreateGuide by remember { mutableStateOf(false) }
+
+    LaunchedEffect(Unit) {
+        viewModel.refreshLabo()
+    }
 
     Column(modifier = modifier.fillMaxSize().padding(16.dp)) {
         Text(
@@ -70,7 +76,11 @@ fun ResourcesScreen(
         Spacer(Modifier.height(24.dp))
 
         if (viewModel.laboTab == LaboTab.CORPUS) {
-            CorpusView(onResourceClick, onCreateClick = { showCreateGuide = true })
+            CorpusView(
+                resources = viewModel.laboResources,
+                onResourceClick = onResourceClick, 
+                onCreateClick = { showCreateGuide = true }
+            )
         } else {
             ExternalResourcesView()
         }
@@ -78,14 +88,18 @@ fun ResourcesScreen(
 
     if (showCreateGuide) {
         CreateSituationGuide(
-            persistenceManager = PersistenceManager(androidx.compose.ui.platform.LocalContext.current),
+            viewModel = viewModel,
             onDismiss = { showCreateGuide = false }
         )
     }
 }
 
 @Composable
-fun CorpusView(onResourceClick: (LaboResource) -> Unit, onCreateClick: () -> Unit) {
+fun CorpusView(
+    resources: List<LaboResource>,
+    onResourceClick: (LaboResource) -> Unit, 
+    onCreateClick: () -> Unit
+) {
     Column {
         Button(
             onClick = onCreateClick,
@@ -102,7 +116,7 @@ fun CorpusView(onResourceClick: (LaboResource) -> Unit, onCreateClick: () -> Uni
         Spacer(Modifier.height(20.dp))
 
         LazyColumn(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-            items(laboCorpus) { res ->
+            items(resources) { res ->
                 LaboResourceCard(res, onClick = { onResourceClick(res) })
             }
             item { Spacer(modifier = Modifier.height(100.dp)) }
@@ -112,46 +126,170 @@ fun CorpusView(onResourceClick: (LaboResource) -> Unit, onCreateClick: () -> Uni
 
 @Composable
 fun ExternalResourcesView() {
-    val externalMocks = listOf(
-        "Fiches Techniques FFVB (PDF)" to "Ensemble des fondamentaux par catégorie.",
-        "Vidéos Pédagogiques Volley" to "Gestuelles et placements en mouvement.",
-        "Règlements Officiels" to "Mise à jour des règles de jeu 2024/2025."
-    )
-    
-    LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        items(externalMocks) { item ->
-            Card(
-                modifier = Modifier.fillMaxWidth().clickable { /* Link to external */ },
-                shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.1f)),
-                border = BorderStroke(0.5.dp, Color.White.copy(alpha = 0.15f))
-            ) {
-                Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Surface(
-                        color = Color(0xFF0D47A1).copy(alpha = 0.2f),
-                        shape = CircleShape,
-                        modifier = Modifier.size(40.dp)
-                    ) {
-                        Box(contentAlignment = Alignment.Center) {
-                            Icon(Icons.Default.LibraryBooks, null, tint = Color(0xFF2196F3), modifier = Modifier.size(20.dp))
-                        }
-                    }
-                    Spacer(Modifier.width(16.dp))
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(item.first, fontWeight = FontWeight.Bold, color = Color.White)
-                        Text(item.second, style = MaterialTheme.typography.bodySmall, color = Color.White.copy(alpha = 0.6f))
-                    }
-                    Icon(Icons.Default.OpenInNew, null, modifier = Modifier.size(16.dp), tint = Color.White.copy(alpha = 0.4f))
-                }
-            }
+    val context = androidx.compose.ui.platform.LocalContext.current
+
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+        contentPadding = PaddingValues(bottom = 80.dp)
+    ) {
+        // --- SECTION RÈGLEMENTS ---
+        item {
+            Text(
+                "RÈGLEMENTS OFFICIELS", 
+                style = MaterialTheme.typography.labelLarge, 
+                fontWeight = FontWeight.Bold, 
+                color = Color(0xFF00B4D8)
+            )
+            Spacer(Modifier.height(12.dp))
+        }
+
+        item {
+            RuleCard(
+                title = "RGED (Départemental)",
+                subtitle = "Drôme-Ardèche - Édition 2024/2025",
+                icon = Icons.Default.Gite,
+                color = Color(0xFF4CAF50),
+                onClick = { PdfLauncher.openLocalPdf(context, "rules/rged_26_07.pdf") }
+            )
+        }
+
+        item {
+            RuleCard(
+                title = "RGER (Régional)",
+                subtitle = "Ligue AURA - Édition 2024/2025",
+                icon = Icons.Default.LocationCity,
+                color = Color(0xFF2196F3),
+                onClick = { PdfLauncher.openLocalPdf(context, "rules/rger_aura.pdf") }
+            )
+        }
+
+        item {
+            RuleCard(
+                title = "FIVB (National/Intl)",
+                subtitle = "Règles Officielles du Volley-Ball",
+                icon = Icons.Default.Public,
+                color = Color(0xFFF44336),
+                onClick = { PdfLauncher.openRemotePdf(context, "https://www.ffvb.org/data/reglements/reglements-officiels/regles-du-jeu-du-volleyball-2021-2024.pdf") }
+            )
+        }
+
+        // --- AUTRES RESSOURCES ---
+        item {
+            Spacer(Modifier.height(16.dp))
+            Text(
+                "AUTRES RESSOURCES", 
+                style = MaterialTheme.typography.labelLarge, 
+                fontWeight = FontWeight.Bold, 
+                color = Color.White.copy(alpha = 0.6f)
+            )
+            Spacer(Modifier.height(12.dp))
+        }
+
+        item {
+            ExternalResourceRow(
+                title = "Fiches Techniques FFVB",
+                subtitle = "Fondamentaux par catégorie",
+                onClick = { PdfLauncher.openRemotePdf(context, "https://www.ffvb.org/le-volley-ball/le-guide-du-volleyeur/technique/") }
+            )
+        }
+
+        item {
+            ExternalResourceRow(
+                title = "Vidéos Pédagogiques",
+                subtitle = "Gestuelles et placements FFVB",
+                onClick = { PdfLauncher.openRemotePdf(context, "https://www.youtube.com/@FFvolleyball") }
+            )
         }
     }
 }
 
 @Composable
-fun CreateSituationGuide(persistenceManager: PersistenceManager, onDismiss: () -> Unit) {
+fun RuleCard(
+    title: String,
+    subtitle: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    color: Color,
+    onClick: () -> Unit
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onClick() },
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.08f)),
+        border = BorderStroke(0.5.dp, Color.White.copy(alpha = 0.15f))
+    ) {
+        Row(
+            modifier = Modifier.padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Surface(
+                color = color.copy(alpha = 0.2f),
+                shape = CircleShape,
+                modifier = Modifier.size(48.dp),
+                border = BorderStroke(1.dp, color.copy(alpha = 0.4f))
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(icon, null, tint = color, modifier = Modifier.size(24.dp))
+                }
+            }
+            Spacer(Modifier.width(16.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(title, fontWeight = FontWeight.Bold, color = Color.White)
+                Text(subtitle, style = MaterialTheme.typography.bodySmall, color = Color.White.copy(alpha = 0.5f))
+            }
+            Icon(Icons.Default.FileDownload, null, modifier = Modifier.size(18.dp), tint = Color.White.copy(alpha = 0.3f))
+        }
+    }
+}
+
+@Composable
+fun ExternalResourceRow(
+    title: String,
+    subtitle: String,
+    onClick: () -> Unit
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onClick() },
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.05f)),
+        border = BorderStroke(0.5.dp, Color.White.copy(alpha = 0.1f))
+    ) {
+        Row(
+            modifier = Modifier.padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(Icons.Default.LibraryBooks, null, tint = Color.White.copy(alpha = 0.6f), modifier = Modifier.size(20.dp))
+            Spacer(Modifier.width(12.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(title, fontWeight = FontWeight.Bold, color = Color.White, fontSize = 14.sp)
+                Text(subtitle, style = MaterialTheme.typography.bodySmall, color = Color.White.copy(alpha = 0.4f), fontSize = 12.sp)
+            }
+            Icon(Icons.Default.OpenInNew, null, modifier = Modifier.size(16.dp), tint = Color.White.copy(alpha = 0.3f))
+        }
+    }
+}
+
+@Composable
+fun CreateSituationGuide(
+    viewModel: com.example.coachapp.ui.CoachViewModel, 
+    onDismiss: () -> Unit
+) {
     var step by remember { mutableIntStateOf(1) }
     var showBoard by remember { mutableStateOf(false) }
+
+    // Form State
+    var title by remember { mutableStateOf("") }
+    var intention by remember { mutableStateOf("") }
+    var setupDescription by remember { mutableStateOf("") }
+    var variables by remember { mutableStateOf("") }
+    var selectedCategory by remember { mutableStateOf(LaboCategory.TECHNIQUE) }
+
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val persistenceManager = remember { PersistenceManager(context) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -179,22 +317,66 @@ fun CreateSituationGuide(persistenceManager: PersistenceManager, onDismiss: () -
 
                 when (step) {
                     1 -> {
-                        GuideStepHeader("1. L'INTENTION MAJEURE")
-                        Text("Que voulez-vous que l'élève apprenne ? Cherchez l'angle précis (Timing, Posture, ou Prise d'info ?).", style = MaterialTheme.typography.bodyMedium, color = Color.White.copy(alpha = 0.7f))
+                        GuideStepHeader("1. TITRE & CATÉGORIE")
+                        GuideTextField(
+                            value = title,
+                            onValueChange = { title = it },
+                            placeholder = "Nom de la situation..."
+                        )
                         Spacer(Modifier.height(16.dp))
-                        GuideTextField(placeholder = "Ex: Maîtriser le pied de pivot en attaque")
+                        Text("Catégorie :", color = Color.White.copy(alpha = 0.7f), fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                        Spacer(Modifier.height(12.dp))
+                        
+                        // Category Grid 2x2
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            LaboCategory.entries.chunked(2).forEach { rowEntries ->
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    rowEntries.forEach { cat ->
+                                        CategorySelectionCard(
+                                            category = cat,
+                                            isSelected = selectedCategory == cat,
+                                            onSelect = { selectedCategory = cat },
+                                            modifier = Modifier.weight(1f)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                        
+                        Spacer(Modifier.height(24.dp))
+                        GuideStepHeader("INTENTION MAJEURE")
+                        Text("Que voulez-vous que l'élève apprenne ? Timing, Posture, ou Prise d'info ?", style = MaterialTheme.typography.bodyMedium, color = Color.White.copy(alpha = 0.7f))
+                        Spacer(Modifier.height(12.dp))
+                        GuideTextField(
+                            value = intention,
+                            onValueChange = { intention = it },
+                            placeholder = "Ex: Maîtriser le pied de pivot en attaque"
+                        )
                     }
                     2 -> {
                         GuideStepHeader("2. MISE EN PLACE")
                         Text("Détaillez le 'Quoi'. Placements, lanceurs, contraintes et circuit du ballon.", style = MaterialTheme.typography.bodyMedium, color = Color.White.copy(alpha = 0.7f))
                         Spacer(Modifier.height(16.dp))
-                        GuideTextField(placeholder = "Description de la structure...", isLong = true)
+                        GuideTextField(
+                            value = setupDescription,
+                            onValueChange = { setupDescription = it },
+                            placeholder = "Description de la structure...", 
+                            isLong = true
+                        )
                     }
                     3 -> {
                         GuideStepHeader("3. VARIABLES DIDACTIQUES")
                         Text("Paliers de complexité : Comment simplifier si échec ? Comment complexifier si réussite ?", style = MaterialTheme.typography.bodyMedium, color = Color.White.copy(alpha = 0.7f))
                         Spacer(Modifier.height(16.dp))
-                        GuideTextField(placeholder = "Simplifications et complexifications...", isLong = true)
+                        GuideTextField(
+                            value = variables,
+                            onValueChange = { variables = it },
+                            placeholder = "Simplifications et complexifications...", 
+                            isLong = true
+                        )
                     }
                     4 -> {
                         GuideStepHeader("4. SUPPORT VISUEL")
@@ -216,8 +398,23 @@ fun CreateSituationGuide(persistenceManager: PersistenceManager, onDismiss: () -
             }
         },
         confirmButton = {
+            val isReady = step == 4 && title.isNotBlank() && intention.isNotBlank() && setupDescription.isNotBlank()
             Button(
-                onClick = { if (step < 4) step++ else onDismiss() },
+                onClick = { 
+                    if (step < 4) {
+                        step++ 
+                    } else {
+                        viewModel.proposeSituation(
+                            title = title,
+                            description = setupDescription,
+                            focalPoints = listOf(FocalPoint("Principal", intention), FocalPoint("Variables", variables)),
+                            category = selectedCategory,
+                            onSuccess = { onDismiss() },
+                            onError = { /* Log error if needed */ }
+                        )
+                    }
+                },
+                enabled = if (step == 4) isReady else true,
                 colors = ButtonDefaults.buttonColors(containerColor = Color.White, contentColor = Color.Black),
                 shape = RoundedCornerShape(10.dp)
             ) { 
@@ -235,16 +432,69 @@ fun CreateSituationGuide(persistenceManager: PersistenceManager, onDismiss: () -
 }
 
 @Composable
+fun CategorySelectionCard(
+    category: LaboCategory,
+    isSelected: Boolean,
+    onSelect: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val icon = when (category) {
+        LaboCategory.TECHNIQUE -> Icons.Default.SportsVolleyball
+        LaboCategory.TACTIQUE -> Icons.Default.GridView // More reliable if Schema is missing
+        LaboCategory.PHYSIQUE -> Icons.Default.FitnessCenter
+        LaboCategory.MENTAL -> Icons.Default.Psychology
+    }
+
+    Surface(
+        modifier = modifier
+            .height(80.dp)
+            .clickable { onSelect() },
+        shape = RoundedCornerShape(16.dp),
+        color = if (isSelected) Color(0xFF00B4D8).copy(alpha = 0.2f) else Color.White.copy(alpha = 0.05f),
+        border = BorderStroke(
+            width = if (isSelected) 2.dp else 1.dp,
+            color = if (isSelected) Color(0xFF00B4D8) else Color.White.copy(alpha = 0.1f)
+        )
+    ) {
+        Column(
+            modifier = Modifier.fillMaxSize().padding(8.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = if (isSelected) Color(0xFF00B4D8) else Color.White.copy(alpha = 0.4f),
+                modifier = Modifier.size(28.dp)
+            )
+            Spacer(Modifier.height(4.dp))
+            Text(
+                text = category.label.split(" ").first(), // Short label or full depending on space
+                color = if (isSelected) Color.White else Color.White.copy(alpha = 0.5f),
+                fontSize = 11.sp,
+                fontWeight = if (isSelected) FontWeight.ExtraBold else FontWeight.Bold,
+                textAlign = TextAlign.Center
+            )
+        }
+    }
+}
+
+@Composable
 fun GuideStepHeader(text: String) {
     Text(text, fontWeight = FontWeight.ExtraBold, color = Color(0xFF00B4D8), fontSize = 14.sp, letterSpacing = 1.sp)
     Spacer(Modifier.height(8.dp))
 }
 
 @Composable
-fun GuideTextField(placeholder: String, isLong: Boolean = false) {
+fun GuideTextField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    placeholder: String, 
+    isLong: Boolean = false
+) {
     OutlinedTextField(
-        value = "", 
-        onValueChange = {}, 
+        value = value, 
+        onValueChange = onValueChange, 
         placeholder = { Text(placeholder, color = Color.White.copy(alpha = 0.3f), fontSize = 14.sp) }, 
         modifier = Modifier.fillMaxWidth().then(if (isLong) Modifier.height(120.dp) else Modifier),
         shape = RoundedCornerShape(12.dp),

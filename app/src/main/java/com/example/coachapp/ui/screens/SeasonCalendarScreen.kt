@@ -553,7 +553,7 @@ fun DailyEventsList(
             val customColor = teamColors[item.teamId] ?: team?.color
             when (item) {
                 is CalendarListItem.Training -> TrainingSessionCard(item.session, team, customColor, allPlayers, persistenceManager, trainingViewModel, onNavigateToPreparer, onViewRecap, onUpdate)
-                is CalendarListItem.Comp -> CompetitionEventCard(item.event, team, allPlayers, trainingViewModel, onUpdate)
+                is CalendarListItem.Comp -> CompetitionEventCard(item.event, team, customColor, allPlayers, trainingViewModel, onUpdate)
                 is CalendarListItem.Club -> {
                     val status = config.clubEventRegistrations[item.event.id] ?: "pending"
                     ClubEventCalendarCard(item.event, status, onEventClick)
@@ -1139,8 +1139,10 @@ fun StatusToggle(status: String, onStatusChange: (String) -> Unit, enabled: Bool
 }
 
 @Composable
-fun CompetitionEventCard(event: CompetitionEvent, team: Team?, allPlayers: List<Player>, trainingViewModel: TrainingViewModel, onUpdate: () -> Unit) {
+fun CompetitionEventCard(event: CompetitionEvent, team: Team?, accentColor: Color?, allPlayers: List<Player>, trainingViewModel: TrainingViewModel, onUpdate: () -> Unit) {
     var showMatchSheet by remember { mutableStateOf(false) }
+    
+    val teamColor = accentColor ?: team?.color ?: event.type.color
     
     Card(
         modifier = Modifier
@@ -1148,12 +1150,23 @@ fun CompetitionEventCard(event: CompetitionEvent, team: Team?, allPlayers: List<
             .padding(vertical = 6.dp)
             .clickable { showMatchSheet = true }, 
         shape = RoundedCornerShape(18.dp), 
-        colors = CardDefaults.cardColors(containerColor = event.type.color.copy(alpha = 0.15f)), 
-        border = BorderStroke(1.dp, event.type.color.copy(alpha = 0.4f))
+        colors = CardDefaults.cardColors(containerColor = teamColor.copy(alpha = 0.12f)), 
+        border = BorderStroke(1.dp, teamColor.copy(alpha = 0.4f))
     ) {
         Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-            Column(modifier = Modifier.weight(1f)) { Text(event.opponent, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Black, color = Color.White); Text(team?.name ?: "Inconnu", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, color = event.type.color); Spacer(Modifier.height(8.dp)); Row(verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Default.LocationOn, null, modifier = Modifier.size(14.dp), tint = Color.White.copy(alpha = 0.6f)); Spacer(Modifier.width(4.dp)); Text(event.location, style = MaterialTheme.typography.bodySmall, color = Color.White.copy(alpha = 0.6f)) } }
-            Surface(color = event.type.color, shape = RoundedCornerShape(8.dp), shadowElevation = 4.dp) { Text(event.type.label.uppercase(), modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp), color = Color.White, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.ExtraBold) }
+            Column(modifier = Modifier.weight(1f)) { 
+                Text(event.opponent, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Black, color = Color.White)
+                Text(team?.name ?: "Inconnu", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, color = teamColor)
+                Spacer(Modifier.height(8.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) { 
+                    Icon(Icons.Default.LocationOn, null, modifier = Modifier.size(14.dp), tint = Color.White.copy(alpha = 0.6f))
+                    Spacer(Modifier.width(4.dp))
+                    Text(event.location, style = MaterialTheme.typography.bodySmall, color = Color.White.copy(alpha = 0.6f))
+                } 
+            }
+            Surface(color = event.type.color, shape = RoundedCornerShape(8.dp), shadowElevation = 4.dp) { 
+                Text(event.type.label.uppercase(), modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp), color = Color.White, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.ExtraBold) 
+            }
         }
     }
     

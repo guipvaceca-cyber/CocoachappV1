@@ -7,11 +7,11 @@ import java.util.UUID
 @Serializable
 enum class PostCategory(val label: String, val icon: String) {
     @SerialName("TACTIC") TACTIC("Tactique", "📋"),
+    @SerialName("SOS") SOS("SOS / Urgent", "🚨"),
     @SerialName("MENTAL") MENTAL("Mental / Relationnel", "🧠"),
     @SerialName("MANAGEMENT") MANAGEMENT("Gestion de groupe", "🤝"),
     @SerialName("EQUIPMENT") EQUIPMENT("Matériel / Logistique", "🏐"),
-    @SerialName("SUCCESS") SUCCESS("Réussite (Vibes)", "✨"),
-    @SerialName("SOS") SOS("SOS / Urgent", "🚨")
+    @SerialName("SUCCESS") SUCCESS("Réussite (Vibes)", "✨")
 }
 
 @Serializable

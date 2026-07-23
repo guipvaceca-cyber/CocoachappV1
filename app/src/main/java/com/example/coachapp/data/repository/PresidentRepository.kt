@@ -7,7 +7,7 @@ import com.example.coachapp.data.TrainingSession
 import com.example.coachapp.data.CompetitionEvent
 import com.example.coachapp.data.CompetitionType
 import io.github.jan.supabase.SupabaseClient
-import io.github.jan.supabase.gotrue.auth
+import io.github.jan.supabase.auth.auth
 import io.github.jan.supabase.postgrest.from
 import io.github.jan.supabase.postgrest.query.Columns
 import io.github.jan.supabase.postgrest.query.Order

@@ -12,7 +12,9 @@ enum class CompetitionType(val label: String, @Serializable(with = ColorSerializ
     CHAMPIONSHIP("Championnat", Color(0xFF2196F3)),
     CUP("Coupe", Color(0xFFE91E63)),
     FRIENDLY("Amical", Color(0xFF4CAF50)),
-    TOURNAMENT("Tournoi", Color(0xFFFF9800))
+    TOURNAMENT("Tournoi", Color(0xFFFF9800)),
+    STAGE("Stage", Color(0xFF9C27B0)),
+    SELECTION("Sélection", Color(0xFFFFC107))
 }
 
 @Serializable
@@ -150,8 +152,8 @@ data class SeasonConfig(
     val trainingSchedules: List<TrainingSchedule> = emptyList(),
     val plannedTrainings: List<TrainingSession> = emptyList(),
     val competitions: List<CompetitionEvent> = emptyList(),
-    @Serializable(with = LocalDateSerializer::class) val seasonStart: LocalDate = LocalDate.of(2024, 9, 1),
-    @Serializable(with = LocalDateSerializer::class) val seasonEnd: LocalDate = LocalDate.of(2025, 6, 30),
+    @Serializable(with = LocalDateSerializer::class) val seasonStart: LocalDate = LocalDate.of(2026, 9, 1),
+    @Serializable(with = LocalDateSerializer::class) val seasonEnd: LocalDate = LocalDate.of(2027, 6, 30),
     val isOnboardingCompleted: Boolean = false,
     val helpUsages: List<Long> = emptyList(), // Timestamps of "Help!" button usage
     val clubEvents: List<ClubEvent> = emptyList(),

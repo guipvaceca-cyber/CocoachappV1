@@ -1,0 +1,11 @@
+- [ ] Refondre `StatTerrainTool.kt` (Terrain Complet)
+    - [ ] Modifier l'aspect ratio pour un terrain 18x9 complet
+    - [ ] Dessiner le filet, les lignes des 3 mètres et les deux camps
+    - [ ] Limiter l'interactivité au camp adverse (moitié supérieure)
+- [ ] Mettre à jour `StatTerrainOverlay.kt` (Landscape Forcé)
+    - [ ] Forcer l'orientation paysage à l'ouverture (DisposableEffect)
+    - [ ] Supprimer la gestion du mode Portrait
+    - [ ] Optimiser le layout Landscape pour le nouveau terrain
+- [ ] Polissage et vérification
+    - [ ] Vérifier le retour à l'orientation normale à la fermeture
+    - [ ] Tester la précision des clics sur le nouveau terrain

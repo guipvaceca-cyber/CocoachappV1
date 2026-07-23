@@ -102,6 +102,20 @@
   </categorie>
   <categorie nom="M11">
     <evenement>
+      <date>2026-09-19</date>
+      <heure>10:00</heure>
+      <type>SELECTION</type>
+      <description>Détection M11/M13 Filles et Garçons</description>
+      <lieu>À définir</lieu>
+    </evenement>
+    <evenement>
+      <date>2026-09-20</date>
+      <heure>10:00</heure>
+      <type>SELECTION</type>
+      <description>Détection M11/M13 Filles et Garçons</description>
+      <lieu>Romans</lieu>
+    </evenement>
+    <evenement>
       <date>2026-10-10</date>
       <heure>09:00</heure>
       <type>CHAMPIONSHIP</type>
@@ -116,6 +130,20 @@
       <lieu>À définir</lieu>
     </evenement>
     <evenement>
+      <date>2026-10-22</date>
+      <heure>09:00</heure>
+      <type>STAGE</type>
+      <description>Sélections et Perfectionnement M11/M13</description>
+      <lieu>Châteauneuf de Galaure</lieu>
+    </evenement>
+    <evenement>
+      <date>2026-10-23</date>
+      <heure>09:00</heure>
+      <type>STAGE</type>
+      <description>Sélections et Perfectionnement M11/M13</description>
+      <lieu>Châteauneuf de Galaure</lieu>
+    </evenement>
+    <evenement>
       <date>2026-11-07</date>
       <heure>09:00</heure>
       <type>CHAMPIONSHIP</type>
@@ -127,6 +155,13 @@
       <heure>09:00</heure>
       <type>CHAMPIONSHIP</type>
       <description>6x6 Sén et M18-21 M11/15</description>
+      <lieu>À définir</lieu>
+    </evenement>
+    <evenement>
+      <date>2026-12-22</date>
+      <heure>09:00</heure>
+      <type>STAGE</type>
+      <description>Sélections et Perfectionnement M11/M13</description>
       <lieu>À définir</lieu>
     </evenement>
     <evenement>
@@ -149,6 +184,20 @@
       <type>CHAMPIONSHIP</type>
       <description>6x6 Sén et M18-21 M11/15</description>
       <lieu>À définir</lieu>
+    </evenement>
+    <evenement>
+      <date>2027-02-18</date>
+      <heure>09:00</heure>
+      <type>STAGE</type>
+      <description>Sélections et Perfectionnement M11/M13</description>
+      <lieu>Châteauneuf de Galaure</lieu>
+    </evenement>
+    <evenement>
+      <date>2027-02-19</date>
+      <heure>09:00</heure>
+      <type>STAGE</type>
+      <description>Sélections et Perfectionnement M11/M13</description>
+      <lieu>Châteauneuf de Galaure</lieu>
     </evenement>
     <evenement>
       <date>2027-02-27</date>
@@ -186,20 +235,69 @@
       <lieu>À définir</lieu>
     </evenement>
     <evenement>
+      <date>2027-04-15</date>
+      <heure>09:00</heure>
+      <type>STAGE</type>
+      <description>Sélections et Perfectionnement M11/M13</description>
+      <lieu>Châteauneuf de Galaure</lieu>
+    </evenement>
+    <evenement>
+      <date>2027-04-16</date>
+      <heure>09:00</heure>
+      <type>STAGE</type>
+      <description>Sélections et Perfectionnement M11/M13</description>
+      <lieu>Châteauneuf de Galaure</lieu>
+    </evenement>
+    <evenement>
       <date>2027-05-11</date>
       <heure>09:00</heure>
       <type>CUP</type>
       <description>Cdf Fin M11</description>
       <lieu>À définir</lieu>
     </evenement>
+    <evenement>
+      <date>2027-06-05</date>
+      <heure>09:00</heure>
+      <type>TOURNAMENT</type>
+      <description>Tournoi Interdépartemental M12 (CD 42)</description>
+      <lieu>À définir</lieu>
+    </evenement>
   </categorie>
   <categorie nom="M13">
+    <evenement>
+      <date>2026-09-19</date>
+      <heure>10:00</heure>
+      <type>SELECTION</type>
+      <description>Détection M11/M13 Filles et Garçons</description>
+      <lieu>À définir</lieu>
+    </evenement>
+    <evenement>
+      <date>2026-09-20</date>
+      <heure>10:00</heure>
+      <type>SELECTION</type>
+      <description>Détection M11/M13 Filles et Garçons</description>
+      <lieu>Romans</lieu>
+    </evenement>
     <evenement>
       <date>2026-10-17</date>
       <heure>09:00</heure>
       <type>CHAMPIONSHIP</type>
       <description>6x6 Sén et M18-21 M13/18 - 6x6 M15</description>
       <lieu>À définir</lieu>
+    </evenement>
+    <evenement>
+      <date>2026-10-22</date>
+      <heure>09:00</heure>
+      <type>STAGE</type>
+      <description>Sélections et Perfectionnement M11/M13</description>
+      <lieu>Châteauneuf de Galaure</lieu>
+    </evenement>
+    <evenement>
+      <date>2026-10-23</date>
+      <heure>09:00</heure>
+      <type>STAGE</type>
+      <description>Sélections et Perfectionnement M11/M13</description>
+      <lieu>Châteauneuf de Galaure</lieu>
     </evenement>
     <evenement>
       <date>2026-10-28</date>
@@ -248,6 +346,13 @@
       <heure>09:00</heure>
       <type>CHAMPIONSHIP</type>
       <description>6x6 Sén et M18-21 M9/13/18 - 6x6 M15</description>
+      <lieu>À définir</lieu>
+    </evenement>
+    <evenement>
+      <date>2026-12-22</date>
+      <heure>09:00</heure>
+      <type>STAGE</type>
+      <description>Sélections et Perfectionnement M11/M13</description>
       <lieu>À définir</lieu>
     </evenement>
     <evenement>
@@ -300,10 +405,31 @@
       <lieu>À définir</lieu>
     </evenement>
     <evenement>
+      <date>2027-02-18</date>
+      <heure>09:00</heure>
+      <type>STAGE</type>
+      <description>Sélections et Perfectionnement M11/M13</description>
+      <lieu>Châteauneuf de Galaure</lieu>
+    </evenement>
+    <evenement>
+      <date>2027-02-19</date>
+      <heure>09:00</heure>
+      <type>STAGE</type>
+      <description>Sélections et Perfectionnement M11/M13</description>
+      <lieu>Châteauneuf de Galaure</lieu>
+    </evenement>
+    <evenement>
       <date>2027-02-20</date>
       <heure>09:00</heure>
       <type>CHAMPIONSHIP</type>
       <description>6x6 Sén et M18-21 M9/13/18 - 6x6 M15</description>
+      <lieu>À définir</lieu>
+    </evenement>
+    <evenement>
+      <date>2027-02-27</date>
+      <heure>09:00</heure>
+      <type>TOURNAMENT</type>
+      <description>Tournoi Interdépartemental M13F et M13G (CD 69)</description>
       <lieu>À définir</lieu>
     </evenement>
     <evenement>
@@ -335,10 +461,24 @@
       <lieu>À définir</lieu>
     </evenement>
     <evenement>
+      <date>2027-04-15</date>
+      <heure>09:00</heure>
+      <type>STAGE</type>
+      <description>Sélections et Perfectionnement M11/M13</description>
+      <lieu>Châteauneuf de Galaure</lieu>
+    </evenement>
+    <evenement>
+      <date>2027-04-16</date>
+      <heure>09:00</heure>
+      <type>STAGE</type>
+      <description>Sélections et Perfectionnement M11/M13</description>
+      <lieu>Châteauneuf de Galaure</lieu>
+    </evenement>
+    <evenement>
       <date>2027-04-24</date>
       <heure>09:00</heure>
       <type>TOURNAMENT</type>
-      <description>TI M13</description>
+      <description>Tournoi Interdépartemental M13F et M13G (CD 69)</description>
       <lieu>À définir</lieu>
     </evenement>
     <evenement>
@@ -356,6 +496,27 @@
       <lieu>À définir</lieu>
     </evenement>
     <evenement>
+      <date>2027-05-15</date>
+      <heure>09:00</heure>
+      <type>TOURNAMENT</type>
+      <description>Volleyades M13 (Qualification)</description>
+      <lieu>À définir</lieu>
+    </evenement>
+    <evenement>
+      <date>2027-05-16</date>
+      <heure>09:00</heure>
+      <type>TOURNAMENT</type>
+      <description>Volleyades M13 (Qualification)</description>
+      <lieu>À définir</lieu>
+    </evenement>
+    <evenement>
+      <date>2027-05-17</date>
+      <heure>09:00</heure>
+      <type>TOURNAMENT</type>
+      <description>Volleyades M13 (Qualification)</description>
+      <lieu>À définir</lieu>
+    </evenement>
+    <evenement>
       <date>2027-05-29</date>
       <heure>09:00</heure>
       <type>TOURNAMENT</type>
@@ -364,6 +525,20 @@
     </evenement>
   </categorie>
   <categorie nom="M15">
+    <evenement>
+      <date>2026-09-19</date>
+      <heure>14:00</heure>
+      <type>SELECTION</type>
+      <description>Détection M15/M18 Filles et Garçons</description>
+      <lieu>À définir</lieu>
+    </evenement>
+    <evenement>
+      <date>2026-09-20</date>
+      <heure>14:00</heure>
+      <type>SELECTION</type>
+      <description>Détection M15/M18 Filles et Garçons</description>
+      <lieu>Romans</lieu>
+    </evenement>
     <evenement>
       <date>2026-10-07</date>
       <heure>09:00</heure>
@@ -379,11 +554,25 @@
       <lieu>À définir</lieu>
     </evenement>
     <evenement>
+      <date>2026-10-19</date>
+      <heure>09:00</heure>
+      <type>STAGE</type>
+      <description>Perfectionnement M15/M18</description>
+      <lieu>Châteauneuf de Galaure</lieu>
+    </evenement>
+    <evenement>
+      <date>2026-10-20</date>
+      <heure>09:00</heure>
+      <type>STAGE</type>
+      <description>Sélections et Perfectionnement M15/M18</description>
+      <lieu>Châteauneuf de Galaure</lieu>
+    </evenement>
+    <evenement>
       <date>2026-10-21</date>
       <heure>09:00</heure>
-      <type>CHAMPIONSHIP</type>
-      <description>6x6 Sén et M18-21 M11/15</description>
-      <lieu>À définir</lieu>
+      <type>SELECTION</type>
+      <description>Sélections M15/M18</description>
+      <lieu>Châteauneuf de Galaure</lieu>
     </evenement>
     <evenement>
       <date>2026-11-07</date>
@@ -411,6 +600,13 @@
       <heure>09:00</heure>
       <type>CHAMPIONSHIP</type>
       <description>6x6 Sén et M18-21 M9/13/18 - 6x6 M15</description>
+      <lieu>À définir</lieu>
+    </evenement>
+    <evenement>
+      <date>2026-12-21</date>
+      <heure>09:00</heure>
+      <type>STAGE</type>
+      <description>Sélections et Perfectionnement M15/M18</description>
       <lieu>À définir</lieu>
     </evenement>
     <evenement>
@@ -468,6 +664,27 @@
       <type>CHAMPIONSHIP</type>
       <description>6x6 Sén et M18-21 M11/15</description>
       <lieu>À définir</lieu>
+    </evenement>
+    <evenement>
+      <date>2027-02-15</date>
+      <heure>09:00</heure>
+      <type>STAGE</type>
+      <description>Perfectionnement M15/M18</description>
+      <lieu>Châteauneuf de Galaure</lieu>
+    </evenement>
+    <evenement>
+      <date>2027-02-16</date>
+      <heure>09:00</heure>
+      <type>STAGE</type>
+      <description>Sélections et Perfectionnement M15/M18</description>
+      <lieu>Châteauneuf de Galaure</lieu>
+    </evenement>
+    <evenement>
+      <date>2027-02-17</date>
+      <heure>09:00</heure>
+      <type>SELECTION</type>
+      <description>Sélections M15/M18</description>
+      <lieu>Châteauneuf de Galaure</lieu>
     </evenement>
     <evenement>
       <date>2027-02-20</date>
@@ -526,10 +743,31 @@
       <lieu>À définir</lieu>
     </evenement>
     <evenement>
+      <date>2027-04-12</date>
+      <heure>09:00</heure>
+      <type>SELECTION</type>
+      <description>Sélections M15/M18</description>
+      <lieu>Châteauneuf de Galaure</lieu>
+    </evenement>
+    <evenement>
+      <date>2027-04-13</date>
+      <heure>09:00</heure>
+      <type>STAGE</type>
+      <description>Sélections et Perfectionnement M15/M18</description>
+      <lieu>Châteauneuf de Galaure</lieu>
+    </evenement>
+    <evenement>
+      <date>2027-04-14</date>
+      <heure>09:00</heure>
+      <type>STAGE</type>
+      <description>Perfectionnement M15/M18</description>
+      <lieu>Châteauneuf de Galaure</lieu>
+    </evenement>
+    <evenement>
       <date>2027-04-15</date>
       <heure>09:00</heure>
-      <type>CHAMPIONSHIP</type>
-      <description>6x6 jeunes</description>
+      <type>TOURNAMENT</type>
+      <description>Tournoi Interdépartemental M15 (CD 01)</description>
       <lieu>À définir</lieu>
     </evenement>
     <evenement>
@@ -548,6 +786,20 @@
     </evenement>
   </categorie>
   <categorie nom="M18">
+    <evenement>
+      <date>2026-09-19</date>
+      <heure>14:00</heure>
+      <type>SELECTION</type>
+      <description>Détection M15/M18 Filles et Garçons</description>
+      <lieu>À définir</lieu>
+    </evenement>
+    <evenement>
+      <date>2026-09-20</date>
+      <heure>14:00</heure>
+      <type>SELECTION</type>
+      <description>Détection M15/M18 Filles et Garçons</description>
+      <lieu>Romans</lieu>
+    </evenement>
     <evenement>
       <date>2026-10-03</date>
       <heure>09:00</heure>
@@ -570,11 +822,25 @@
       <lieu>À définir</lieu>
     </evenement>
     <evenement>
+      <date>2026-10-19</date>
+      <heure>09:00</heure>
+      <type>STAGE</type>
+      <description>Perfectionnement M15/M18</description>
+      <lieu>Châteauneuf de Galaure</lieu>
+    </evenement>
+    <evenement>
+      <date>2026-10-20</date>
+      <heure>09:00</heure>
+      <type>STAGE</type>
+      <description>Sélections et Perfectionnement M15/M18</description>
+      <lieu>Châteauneuf de Galaure</lieu>
+    </evenement>
+    <evenement>
       <date>2026-10-21</date>
       <heure>09:00</heure>
-      <type>CHAMPIONSHIP</type>
-      <description>6x6 Sén et M18-21 M11/15</description>
-      <lieu>À définir</lieu>
+      <type>SELECTION</type>
+      <description>Sélections M15/M18</description>
+      <lieu>Châteauneuf de Galaure</lieu>
     </evenement>
     <evenement>
       <date>2026-10-28</date>
@@ -637,6 +903,13 @@
       <heure>09:00</heure>
       <type>CHAMPIONSHIP</type>
       <description>6x6 Sén et M18-21 M9/13/18 - 6x6 M15</description>
+      <lieu>À définir</lieu>
+    </evenement>
+    <evenement>
+      <date>2026-12-21</date>
+      <heure>09:00</heure>
+      <type>STAGE</type>
+      <description>Sélections et Perfectionnement M15/M18</description>
       <lieu>À définir</lieu>
     </evenement>
     <evenement>
@@ -703,6 +976,27 @@
       <lieu>À définir</lieu>
     </evenement>
     <evenement>
+      <date>2027-02-15</date>
+      <heure>09:00</heure>
+      <type>STAGE</type>
+      <description>Perfectionnement M15/M18</description>
+      <lieu>Châteauneuf de Galaure</lieu>
+    </evenement>
+    <evenement>
+      <date>2027-02-16</date>
+      <heure>09:00</heure>
+      <type>STAGE</type>
+      <description>Sélections et Perfectionnement M15/M18</description>
+      <lieu>Châteauneuf de Galaure</lieu>
+    </evenement>
+    <evenement>
+      <date>2027-02-17</date>
+      <heure>09:00</heure>
+      <type>SELECTION</type>
+      <description>Sélections M15/M18</description>
+      <lieu>Châteauneuf de Galaure</lieu>
+    </evenement>
+    <evenement>
       <date>2027-02-20</date>
       <heure>09:00</heure>
       <type>CHAMPIONSHIP</type>
@@ -752,6 +1046,41 @@
       <lieu>À définir</lieu>
     </evenement>
     <evenement>
+      <date>2027-04-12</date>
+      <heure>09:00</heure>
+      <type>SELECTION</type>
+      <description>Sélections M15/M18</description>
+      <lieu>Châteauneuf de Galaure</lieu>
+    </evenement>
+    <evenement>
+      <date>2027-04-13</date>
+      <heure>09:00</heure>
+      <type>STAGE</type>
+      <description>Sélections et Perfectionnement M15/M18</description>
+      <lieu>Châteauneuf de Galaure</lieu>
+    </evenement>
+    <evenement>
+      <date>2027-04-14</date>
+      <heure>09:00</heure>
+      <type>STAGE</type>
+      <description>Perfectionnement M15/M18</description>
+      <lieu>Châteauneuf de Galaure</lieu>
+    </evenement>
+    <evenement>
+      <date>2027-05-08</date>
+      <heure>09:00</heure>
+      <type>TOURNAMENT</type>
+      <description>Tournoi Interdépartemental M18F et M18G (Valence)</description>
+      <lieu>À définir</lieu>
+    </evenement>
+    <evenement>
+      <date>2027-05-09</date>
+      <heure>09:00</heure>
+      <type>TOURNAMENT</type>
+      <description>Tournoi Interdépartemental M18F et M18G (Valence)</description>
+      <lieu>À définir</lieu>
+    </evenement>
+    <evenement>
       <date>2027-05-10</date>
       <heure>09:00</heure>
       <type>CUP</type>
@@ -779,6 +1108,13 @@
       <heure>09:00</heure>
       <type>CHAMPIONSHIP</type>
       <description>6x6 Sén et M18-21 M11/15</description>
+      <lieu>À définir</lieu>
+    </evenement>
+    <evenement>
+      <date>2026-10-11</date>
+      <heure>09:00</heure>
+      <type>STAGE</type>
+      <description>Journée de stage de perfectionnement M21 uniquement</description>
       <lieu>À définir</lieu>
     </evenement>
     <evenement>

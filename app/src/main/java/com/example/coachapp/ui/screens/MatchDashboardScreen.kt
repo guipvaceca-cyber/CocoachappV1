@@ -19,6 +19,7 @@ import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.snapshots.SnapshotStateList
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
@@ -33,7 +34,9 @@ import androidx.compose.ui.unit.sp
 import com.example.coachapp.R
 import com.example.coachapp.data.*
 import com.example.coachapp.ui.components.ScoreColumn
+import com.example.coachapp.ui.components.ScoutingOverlay
 import com.example.coachapp.ui.components.TacticalBoardOverlay
+import com.example.coachapp.ui.scouting.ScoutingViewModel
 import java.util.*
 
 @Composable
@@ -57,7 +60,21 @@ fun MatchDashboardScreen(
     
     var showScorer by rememberSaveable { mutableStateOf(true) }
     var showRotation by rememberSaveable { mutableStateOf(true) }
+    var showStatsTerrain by rememberSaveable { mutableStateOf(false) }
     var showTacticalBoard by remember { mutableStateOf(false) }
+
+    val onField = remember(selectedTeamId) { mutableStateListOf<String?>() }
+    val matchFormat = remember(selectedTeam) { 
+        mutableStateOf(if (selectedTeam?.name?.contains("M13", ignoreCase = true) == true) TeamFormat.FOUR_FOUR else selectedTeam?.format ?: TeamFormat.SIX_SIX)
+    }
+
+    // Initialize onField when team or format changes
+    LaunchedEffect(matchFormat.value) {
+        if (onField.size != matchFormat.value.playerCount) {
+            onField.clear()
+            repeat(matchFormat.value.playerCount) { onField.add(null) }
+        }
+    }
 
     // --- WHISTLE SOUND LOGIC ---
     val context = LocalContext.current
@@ -153,8 +170,11 @@ fun MatchDashboardScreen(
                     border = androidx.compose.foundation.BorderStroke(0.5.dp, Color.White.copy(alpha = 0.2f))
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
+                        IconButton(onClick = { showStatsTerrain = true }) {
+                            Icon(Icons.Default.Analytics, null, tint = Color.White, modifier = Modifier.size(20.dp))
+                        }
                         IconButton(onClick = { showTacticalBoard = true }) {
-                            Icon(Icons.Default.MenuBook, null, tint = Color.White, modifier = Modifier.size(20.dp))
+                            Icon(Icons.Default.TabletAndroid, null, tint = Color.White, modifier = Modifier.size(20.dp))
                         }
                         
                         if (seasonConfig.teams.size > 1) {
@@ -257,10 +277,23 @@ fun MatchDashboardScreen(
                         else 0.08f
                     )
                 ) {
-                    RotationManager(team = selectedTeam, seasonConfig = seasonConfig, onUpdatePlayer = onUpdatePlayer)
+                    RotationManager(
+                        team = selectedTeam, 
+                        seasonConfig = seasonConfig, 
+                        onUpdatePlayer = onUpdatePlayer,
+                        onField = onField,
+                        matchFormatState = matchFormat
+                    )
                 }
             }
         }
+
+        ScoutingOverlay(
+            isVisible = showStatsTerrain,
+            onDismiss = { showStatsTerrain = false },
+            onField = onField,
+            allPlayers = seasonConfig.players
+        )
 
         TacticalBoardOverlay(
             isVisible = showTacticalBoard,
@@ -456,11 +489,17 @@ fun VolleyScorer(
 }
 
 @Composable
-fun RotationManager(team: Team, seasonConfig: SeasonConfig, onUpdatePlayer: (Player) -> Unit) {
+fun RotationManager(
+    team: Team, 
+    seasonConfig: SeasonConfig, 
+    onUpdatePlayer: (Player) -> Unit,
+    onField: SnapshotStateList<String?>,
+    matchFormatState: MutableState<TeamFormat>
+) {
     // Local override for the match format
-    var matchFormat by remember { mutableStateOf(if (team.name.contains("M13", ignoreCase = true)) TeamFormat.FOUR_FOUR else team.format) }
+    var matchFormat by matchFormatState
     
-    // Auto-adaptation logic
+    // Auto-adaptation logic (only if not already set or team changed)
     LaunchedEffect(team.id) {
         matchFormat = if (team.name.contains("M13", ignoreCase = true)) TeamFormat.FOUR_FOUR else team.format
     }
@@ -473,10 +512,6 @@ fun RotationManager(team: Team, seasonConfig: SeasonConfig, onUpdatePlayer: (Pla
     
     val positionsCount = matchFormat.playerCount
     var rotationOffset by rememberSaveable { mutableIntStateOf(0) }
-    
-    val onField = remember(matchFormat) { mutableStateListOf<String?>().apply { 
-        repeat(positionsCount) { add(null) } 
-    } }
     
     var selectedPositionIndex by remember { mutableIntStateOf(-1) }
     var selectedTargetRole by remember { mutableStateOf("") }

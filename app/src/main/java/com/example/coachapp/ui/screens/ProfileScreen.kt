@@ -1,5 +1,7 @@
 package com.example.coachapp.ui.screens
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -38,6 +40,8 @@ fun ProfileScreen(
     userRole: com.example.coachapp.data.UserRole = com.example.coachapp.data.UserRole.USER,
     isCoachCde: Boolean = false,
     isStageOpen: Boolean = false,
+    stageOpenStatuses: Map<String, Boolean> = emptyMap(),
+    slotsByCategorie: Map<String, List<com.example.coachapp.ui.screens.JoueurSlot?>> = emptyMap(),
     cdeAssignments: List<com.example.coachapp.data.CdeAssignment> = emptyList(),
     vivierPrincipal: List<JoueurVivier> = emptyList(),
     vivierInferieur: List<JoueurVivier> = emptyList(),
@@ -45,13 +49,15 @@ fun ProfileScreen(
     bancPersiste: List<com.example.coachapp.ui.screens.JoueurSlot?> = emptyList(),
     selectionAlerteMessage: String? = null,
     onOuverture: (categorie: String) -> Unit = {},
-    onSlotChange: (index: Int, type: String, joueur: com.example.coachapp.ui.screens.JoueurSlot?) -> Unit = { _, _, _ -> },
-    onSauvegarder: (principal: List<com.example.coachapp.ui.screens.JoueurSlot?>, banc: List<com.example.coachapp.ui.screens.JoueurSlot?>) -> Unit = { _, _ -> },
+    onSlotChange: (index: Int, type: String, joueur: com.example.coachapp.ui.screens.JoueurSlot?, categorie: String) -> Unit = { _, _, _, _ -> },
+    onSauvegarder: (principal: List<com.example.coachapp.ui.screens.JoueurSlot?>, banc: List<com.example.coachapp.ui.screens.JoueurSlot?>, categorie: String) -> Unit = { _, _, _ -> },
     onEnvoyerSelection: (categorie: String) -> Unit = {},
     onUpdateConfig: (SeasonConfig) -> Unit = {},
     onLogout: () -> Unit = {},
     onNavigateToPresident: () -> Unit = {},
-    onNavigateToGlobalAssessment: () -> Unit = {}
+    onNavigateToGlobalAssessment: () -> Unit = {},
+    onNavigateToStagePlanning: (List<String>) -> Unit = {},
+    onUpdateProfilePicture: (String) -> Unit = {}
 ) {
     val dateFormat = remember { SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.getDefault()) }
     var expandedSection by remember { mutableStateOf("IDENTITY") }
@@ -90,23 +96,51 @@ fun ProfileScreen(
                 modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Profile Picture
-                Surface(
-                    modifier = Modifier.size(64.dp),
-                    shape = CircleShape,
-                    color = Color.White.copy(alpha = 0.1f),
-                    border = BorderStroke(1.5.dp, Color(0xFF00B4D8).copy(alpha = 0.5f))
+                // Profile Picture with Picker
+                val photoPickerLauncher = rememberLauncherForActivityResult(
+                    contract = ActivityResultContracts.GetContent()
+                ) { uri ->
+                    uri?.let { onUpdateProfilePicture(it.toString()) }
+                }
+
+                Box(
+                    modifier = Modifier.size(68.dp).clickable { photoPickerLauncher.launch("image/*") },
+                    contentAlignment = Alignment.BottomEnd
                 ) {
-                    if (seasonConfig.coachProfile.profilePictureUri != null) {
-                        AsyncImage(
-                            model = seasonConfig.coachProfile.profilePictureUri,
-                            contentDescription = "Photo de profil",
-                            modifier = Modifier.fillMaxSize(),
-                            contentScale = androidx.compose.ui.layout.ContentScale.Crop
-                        )
-                    } else {
+                    Surface(
+                        modifier = Modifier.size(64.dp),
+                        shape = CircleShape,
+                        color = Color.White.copy(alpha = 0.1f),
+                        border = BorderStroke(1.5.dp, Color(0xFF00B4D8).copy(alpha = 0.5f))
+                    ) {
+                        if (seasonConfig.coachProfile.profilePictureUri != null) {
+                            AsyncImage(
+                                model = seasonConfig.coachProfile.profilePictureUri,
+                                contentDescription = "Photo de profil",
+                                modifier = Modifier.fillMaxSize(),
+                                contentScale = androidx.compose.ui.layout.ContentScale.Crop
+                            )
+                        } else {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(Icons.Default.Person, null, tint = Color.White.copy(alpha = 0.5f), modifier = Modifier.size(32.dp))
+                            }
+                        }
+                    }
+                    
+                    // Edit Badge
+                    Surface(
+                        modifier = Modifier.size(20.dp),
+                        shape = CircleShape,
+                        color = Color(0xFF00B4D8),
+                        border = BorderStroke(1.5.dp, Color(0xFF001529))
+                    ) {
                         Box(contentAlignment = Alignment.Center) {
-                            Icon(Icons.Default.Person, null, tint = Color.White.copy(alpha = 0.5f), modifier = Modifier.size(32.dp))
+                            Icon(
+                                Icons.Default.Edit, 
+                                null, 
+                                modifier = Modifier.size(10.dp), 
+                                tint = Color.White
+                            )
                         }
                     }
                 }
@@ -154,13 +188,13 @@ fun ProfileScreen(
 
             // --- SECTION 2 : HISTORY ---
             ProfileExpandableSection(
-                title = "Historique",
-                description = "Retrouvez vos bilans passés.",
+                title = "Journal de Bord",
+                description = "Retrouvez vos bilans et notes terrain.",
                 icon = Icons.Default.History,
                 isExpanded = expandedSection == "HISTORY",
                 onToggle = { expandedSection = if (expandedSection == "HISTORY") "" else "HISTORY" }
             ) {
-                HistoryListInProfile(history, dateFormat)
+                HistoryListInProfile(history, seasonConfig, dateFormat)
             }
 
             // --- SECTION 3 : HUB CDE ---
@@ -180,15 +214,19 @@ fun ProfileScreen(
                             expandedSection = if (expandedSection == key) "" else key 
                         }
                     ) {
+                        val keyStatus = "${assignment.categorie}_${assignment.sexe}"
                         HubCdeContent(
                             cdeCategorie = assignment.categorie,
                             cdeRole = assignment.role,
                             isPrincipal = isPrincipalRole,
-                            isStageOpen = isStageOpen,
-                            slots = slotsPersistes,
+                            isStageOpen = stageOpenStatuses[keyStatus] ?: isStageOpen,
+                            slots = slotsByCategorie[assignment.categorie] ?: emptyList(),
                             alerteMessage = selectionAlerteMessage,
                             onShowConvocation = { categorieEnConvocation = assignment.categorie },
-                            onEnvoyer = { onEnvoyerSelection(assignment.categorie) }
+                            onEnvoyer = { onEnvoyerSelection(assignment.categorie) },
+                            onNavigateToStagePlanning = { 
+                                onNavigateToStagePlanning(listOf(assignment.categorie)) 
+                            }
                         )
                     }
                 }
@@ -270,8 +308,12 @@ fun ProfileScreen(
             bancPersiste = bancPersiste,
             isEditable = isPrincipal,
             onOuverture = { onOuverture(categorieEnConvocation!!) },
-            onSlotChange = { index, type, joueur -> onSlotChange(index, type, joueur) },
-            onSauvegarder = { principal, banc -> onSauvegarder(principal, banc) }
+            onSlotChange = { index, type, joueur -> 
+                onSlotChange(index, type, joueur, categorieEnConvocation!!) 
+            },
+            onSauvegarder = { principal, banc -> 
+                onSauvegarder(principal, banc, categorieEnConvocation!!) 
+            }
         )
     }
 }
@@ -296,7 +338,8 @@ fun HubCdeContent(
     slots: List<JoueurSlot?>,
     alerteMessage: String? = null,
     onShowConvocation: () -> Unit,
-    onEnvoyer: () -> Unit = {}
+    onEnvoyer: () -> Unit = {},
+    onNavigateToStagePlanning: () -> Unit = {}
 ) {
     val countConvoques = slots.count { it != null }
 
@@ -380,7 +423,7 @@ fun HubCdeContent(
         ) {
             Column(modifier = Modifier.padding(12.dp)) {
                 Text(
-                    text = if (countConvoques > 0) "$countConvoques convocation${if(countConvoques>1) "s" else ""} en attente de validation"
+                    text = if (countConvoques > 0) "$countConvoques / ${quotaParCategorie(cdeCategorie)} joueur${if(countConvoques>1) "s" else ""} convoqué${if(countConvoques>1) "s" else ""}"
                            else "Aucune convocation en attente",
                     style = MaterialTheme.typography.labelMedium,
                     color = if (countConvoques > 0) Color(0xFF00B4D8) else Color.White.copy(alpha = 0.5f),
@@ -413,6 +456,19 @@ fun HubCdeContent(
                     }
                 }
             }
+        }
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        Button(
+            onClick = onNavigateToStagePlanning,
+            modifier = Modifier.fillMaxWidth().height(48.dp),
+            shape = RoundedCornerShape(12.dp),
+            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF9C27B0), contentColor = Color.White)
+        ) {
+            Icon(Icons.Default.EventNote, null, modifier = Modifier.size(18.dp))
+            Spacer(Modifier.width(12.dp))
+            Text("Consulter le Planning du Stage", fontWeight = FontWeight.Bold)
         }
 
         if (countConvoques > 0) {
@@ -483,7 +539,8 @@ fun HubCdeContent(
             if (isPrincipal) {
                 Spacer(modifier = Modifier.height(16.dp))
                 
-                if (countConvoques < 14) {
+                val currentQuota = quotaParCategorie(cdeCategorie)
+                if (countConvoques < currentQuota) {
                     Surface(
                         color = Color.Yellow.copy(alpha = 0.1f),
                         shape = RoundedCornerShape(8.dp),
@@ -493,7 +550,7 @@ fun HubCdeContent(
                         Row(modifier = Modifier.padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
                             Icon(Icons.Default.Warning, null, tint = Color.Yellow, modifier = Modifier.size(14.dp))
                             Spacer(Modifier.width(8.dp))
-                            Text("Sélection incomplète (14 places disponibles)", fontSize = 10.sp, color = Color.White.copy(alpha = 0.8f))
+                            Text("Sélection incomplète ($currentQuota places disponibles)", fontSize = 10.sp, color = Color.White.copy(alpha = 0.8f))
                         }
                     }
                 }
@@ -606,20 +663,27 @@ fun ProfileExpandableSection(
 }
 
 @Composable
-fun HistoryListInProfile(history: List<AssessmentRecord>, dateFormat: SimpleDateFormat) {
+fun HistoryListInProfile(history: List<AssessmentRecord>, seasonConfig: SeasonConfig, dateFormat: SimpleDateFormat) {
     if (history.isEmpty()) {
         Text("Aucun historique pour le moment.", color = Color.Gray, style = MaterialTheme.typography.bodySmall)
     } else {
         Column {
             history.reversed().forEach { record ->
-                HistoryCard(record, dateFormat)
+                HistoryCard(record, seasonConfig, dateFormat)
             }
         }
     }
 }
 
 @Composable
-fun HistoryCard(record: AssessmentRecord, dateFormat: SimpleDateFormat) {
+fun HistoryCard(record: AssessmentRecord, seasonConfig: SeasonConfig, dateFormat: SimpleDateFormat) {
+    val linkedSession = remember(record.sessionId) {
+        seasonConfig.plannedTrainings.find { it.id == record.sessionId }
+    }
+    val linkedTeam = remember(linkedSession) {
+        seasonConfig.teams.find { it.id == linkedSession?.teamId }
+    }
+
     Card(
         modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
         shape = RoundedCornerShape(12.dp),
@@ -627,13 +691,62 @@ fun HistoryCard(record: AssessmentRecord, dateFormat: SimpleDateFormat) {
         border = BorderStroke(0.5.dp, Color.White.copy(alpha = 0.1f))
     ) {
         Column(modifier = Modifier.padding(12.dp)) {
-            Text(
-                text = "Diagnostic du ${dateFormat.format(Date(record.date))}",
-                style = MaterialTheme.typography.labelLarge,
-                fontWeight = FontWeight.Bold,
-                color = Color.White
-            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = if (linkedSession != null) "${linkedTeam?.name ?: "Séance"} : ${linkedSession.focusArea ?: "Thème"}"
+                               else "Diagnostic du ${dateFormat.format(Date(record.date))}",
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White
+                    )
+                    if (linkedSession != null) {
+                        Text(
+                            text = dateFormat.format(Date(record.date)),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = Color.White.copy(alpha = 0.5f)
+                        )
+                    }
+                }
+                if (linkedSession != null) {
+                    Surface(
+                        color = Color(0xFF4CAF50).copy(alpha = 0.2f),
+                        shape = RoundedCornerShape(4.dp),
+                        border = BorderStroke(0.5.dp, Color(0xFF4CAF50).copy(alpha = 0.4f))
+                    ) {
+                        Text(
+                            "TERRAIN", 
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                            fontSize = 8.sp,
+                            fontWeight = FontWeight.Black,
+                            color = Color(0xFF4CAF50)
+                        )
+                    }
+                }
+            }
+
+            // --- NOTES À CHAUD (Terrain) ---
+            if (linkedSession != null && linkedSession.liveFeedback.isNotEmpty()) {
+                Spacer(modifier = Modifier.height(12.dp))
+                Text("NOTES À CHAUD :", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = Color(0xFF00B4D8))
+                Surface(
+                    color = Color(0xFF00B4D8).copy(alpha = 0.05f),
+                    shape = RoundedCornerShape(8.dp),
+                    modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                    border = BorderStroke(0.5.dp, Color(0xFF00B4D8).copy(alpha = 0.1f))
+                ) {
+                    Text(
+                        linkedSession.liveFeedback,
+                        modifier = Modifier.padding(8.dp),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color.White.copy(alpha = 0.8f)
+                    )
+                }
+            }
+
             Spacer(modifier = Modifier.height(12.dp))
+            
+            // --- SCORES ---
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 record.scores.forEach { (id, score) ->
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -643,15 +756,20 @@ fun HistoryCard(record: AssessmentRecord, dateFormat: SimpleDateFormat) {
                     }
                 }
             }
-            record.coachNote?.let {
+
+            // --- NOTE BILAN (Futur Moi / Coach Note) ---
+            val debriefNote = record.coachNote ?: linkedSession?.noteForFutureMe
+            if (!debriefNote.isNullOrEmpty()) {
                 Spacer(modifier = Modifier.height(12.dp))
+                Text("BILAN / CONSEIL :", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = Color(0xFFFF9800))
                 Surface(
                     color = Color.White.copy(alpha = 0.03f), 
                     shape = RoundedCornerShape(8.dp),
+                    modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
                     border = BorderStroke(0.5.dp, Color.White.copy(alpha = 0.05f))
                 ) {
                     Text(
-                        it, 
+                        debriefNote, 
                         modifier = Modifier.padding(8.dp), 
                         style = MaterialTheme.typography.bodySmall,
                         color = Color.White.copy(alpha = 0.8f)

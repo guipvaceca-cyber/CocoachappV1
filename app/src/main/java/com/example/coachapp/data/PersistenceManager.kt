@@ -17,7 +17,8 @@ import java.util.UUID
 data class AssessmentRecord(
     val date: Long,
     val scores: Map<String, Double>,
-    @SerialName("note") val coachNote: String? = null
+    @SerialName("note") val coachNote: String? = null,
+    val sessionId: String? = null
 )
 
 /**
@@ -133,9 +134,13 @@ class PersistenceManager(context: Context) {
     }
 
     // --- SERVICE 4 : HISTORIQUE & DIAGNOSTICS ---
-    fun saveResults(results: Map<String, Double>, coachNote: String? = null) {
+    fun saveResults(results: Map<String, Double>, coachNote: String? = null, sessionId: String? = null) {
         val history = loadHistory().toMutableList()
-        history.add(AssessmentRecord(System.currentTimeMillis(), results, coachNote))
+        history.add(AssessmentRecord(System.currentTimeMillis(), results, coachNote, sessionId))
+        saveHistory(history)
+    }
+
+    fun saveHistory(history: List<AssessmentRecord>) {
         val str = json.encodeToString(history)
         prefs.edit().putString("h_diagnostics", str).apply()
     }
